@@ -34,8 +34,8 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 
 	// Load shared items
 	useEffect(() => {
-		const loadItems = () => {
-			const ranked = getRankedSharedItems()
+		const loadItems = async () => {
+			const ranked = await getRankedSharedItems()
 			setSharedItems(ranked)
 		}
 
@@ -140,8 +140,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 		}
 		
 		// Reload items to update favorite counts
-		const ranked = getRankedSharedItems()
-		setSharedItems(ranked)
+		getRankedSharedItems().then(ranked => setSharedItems(ranked))
 	}
 
 	const sortedItems = getSortedItems()

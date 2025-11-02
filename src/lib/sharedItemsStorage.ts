@@ -2,8 +2,11 @@
  * Shared Items Storage Service
  * 
  * Handles shared progressions and compositions for Community feature.
- * Initially uses localStorage, later can migrate to backend API.
+ * Uses Supabase when available, falls back to localStorage.
  */
+
+import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient'
+import { getCurrentUser } from './authService'
 
 export interface SharedProgression {
 	id: string // Shared item ID (unique)
@@ -120,9 +123,66 @@ export function loadSharedProgressions(): SharedProgression[] {
 }
 
 /**
- * Load all shared compositions
+ * Load all shared compositions from Supabase or localStorage
  */
-export function loadSharedCompositions(): SharedComposition[] {
+export async function loadSharedCompositions(): Promise<SharedComposition[]> {
+	if (isSupabaseConfigured()) {
+		try {
+			const supabase = getSupabaseClient()
+			if (!supabase) return loadLocalSharedCompositions()
+			
+			// Load public compositions from Supabase
+			const { data, error } = await supabase
+				.from('compositions')
+				.select('*')
+				.eq('is_public', true)
+				.order('updated_at', { ascending: false })
+			
+			if (error) {
+				console.warn('[sharedItemsStorage] Supabase error loading shared compositions:', error)
+				return loadLocalSharedCompositions()
+			}
+			
+			// Transform Supabase data to SharedComposition format
+			const sharedCompositions: SharedComposition[] = (data || []).map(item => ({
+				id: item.id,
+				originalId: item.id,
+				name: item.name,
+				chords: item.chords as SharedComposition['chords'],
+				tempo: item.tempo,
+				timeSignature: item.time_signature as '3/4' | '4/4',
+				fluteType: 'innato', // Default
+				tuning: '440', // Default
+				sharedBy: item.user_id,
+				sharedByUsername: 'Anonymous', // TODO: Get from user profile table
+				sharedAt: new Date(item.created_at).getTime(),
+				isPublic: true,
+				favoriteCount: 0, // TODO: Calculate from favorites table
+				isReadOnly: true,
+				createdAt: new Date(item.created_at).getTime(),
+				updatedAt: new Date(item.updated_at).getTime(),
+				version: item.version || 1
+			}))
+			
+			// Also merge with localStorage for backward compatibility
+			const localShared = loadLocalSharedCompositions()
+			const supabaseIds = new Set(sharedCompositions.map(c => c.id))
+			const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
+			
+			return [...sharedCompositions, ...localOnly]
+		} catch (error) {
+			console.error('[sharedItemsStorage] Error loading shared compositions from Supabase:', error)
+			return loadLocalSharedCompositions()
+		}
+	}
+	
+	return loadLocalSharedCompositions()
+}
+
+/**
+ * Load shared compositions from localStorage (fallback)
+ */
+function loadLocalSharedCompositions(): SharedComposition[] {
 	try {
 		const data = localStorage.getItem(STORAGE_KEY_COMPOSITIONS)
 		if (data) {
@@ -188,17 +248,125 @@ export function saveSharedProgression(
 }
 
 /**
- * Save shared composition
+ * Save shared composition to Supabase and localStorage
  */
-export function saveSharedComposition(
+export async function saveSharedComposition(
 	composition: Omit<SharedComposition, 'id' | 'sharedBy' | 'sharedByUsername' | 'sharedAt' | 'favoriteCount' | 'isReadOnly' | 'version'>,
 	isUpdate: boolean = false
-): SharedComposition {
-	const shared = loadSharedCompositions()
+): Promise<SharedComposition> {
 	const currentUserId = getCurrentUserId()
 	const now = Date.now()
 	
-	// Check if this composition was already shared by this user
+	// Try to save to Supabase first
+	if (isSupabaseConfigured()) {
+		try {
+			const supabase = getSupabaseClient()
+			const user = getCurrentUser()
+			
+			if (supabase && user) {
+				const { data: { session } } = await supabase.auth.getSession()
+				if (session?.user?.id) {
+					// Check if composition exists in Supabase
+					const { data: existing } = await supabase
+						.from('compositions')
+						.select('id, version')
+						.eq('id', composition.originalId)
+						.eq('user_id', session.user.id)
+						.single()
+					
+					if (existing) {
+						// Update existing composition to be public
+						const { data: updated, error } = await supabase
+							.from('compositions')
+							.update({
+								name: composition.name,
+								chords: composition.chords,
+								tempo: composition.tempo,
+								time_signature: composition.timeSignature,
+								is_public: true,
+								version: isUpdate ? (existing.version || 1) + 1 : existing.version || 1
+							})
+							.eq('id', composition.originalId)
+							.eq('user_id', session.user.id)
+							.select()
+							.single()
+						
+						if (!error && updated) {
+							const saved: SharedComposition = {
+								id: updated.id,
+								originalId: updated.id,
+								name: updated.name,
+								chords: updated.chords as SharedComposition['chords'],
+								tempo: updated.tempo,
+								timeSignature: updated.time_signature as '3/4' | '4/4',
+								fluteType: composition.fluteType,
+								tuning: composition.tuning,
+								sharedBy: session.user.id,
+								sharedByUsername: getCurrentUsername(),
+								sharedAt: new Date(updated.created_at).getTime(),
+								isPublic: true,
+								favoriteCount: 0,
+								isReadOnly: true,
+								createdAt: new Date(updated.created_at).getTime(),
+								updatedAt: new Date(updated.updated_at).getTime(),
+								version: updated.version || 1
+							}
+							
+							// Also save to localStorage for backward compatibility
+							saveLocalSharedComposition(saved)
+							return saved
+						}
+					} else {
+						// Composition doesn't exist in Supabase yet - create it as public
+						const { data: inserted, error: insertError } = await supabase
+							.from('compositions')
+							.insert({
+								user_id: session.user.id,
+								name: composition.name,
+								chords: composition.chords,
+								tempo: composition.tempo,
+								time_signature: composition.timeSignature,
+								is_public: true,
+								version: 1
+							})
+							.select()
+							.single()
+						
+						if (!insertError && inserted) {
+							const saved: SharedComposition = {
+								id: inserted.id,
+								originalId: inserted.id,
+								name: inserted.name,
+								chords: inserted.chords as SharedComposition['chords'],
+								tempo: inserted.tempo,
+								timeSignature: inserted.time_signature as '3/4' | '4/4',
+								fluteType: composition.fluteType,
+								tuning: composition.tuning,
+								sharedBy: session.user.id,
+								sharedByUsername: getCurrentUsername(),
+								sharedAt: new Date(inserted.created_at).getTime(),
+								isPublic: true,
+								favoriteCount: 0,
+								isReadOnly: true,
+								createdAt: new Date(inserted.created_at).getTime(),
+								updatedAt: new Date(inserted.updated_at).getTime(),
+								version: inserted.version || 1
+							}
+							
+							// Also save to localStorage for backward compatibility
+							saveLocalSharedComposition(saved)
+							return saved
+						}
+					}
+				}
+			}
+		} catch (error) {
+			console.warn('[sharedItemsStorage] Error saving to Supabase, falling back to localStorage:', error)
+		}
+	}
+	
+	// Fallback to localStorage only
+	const shared = loadLocalSharedCompositions()
 	const existingIndex = shared.findIndex(
 		s => s.originalId === composition.originalId && s.sharedBy === currentUserId
 	)
@@ -206,25 +374,22 @@ export function saveSharedComposition(
 	let saved: SharedComposition
 	
 	if (existingIndex >= 0 && isUpdate) {
-		// Update existing shared composition (new version)
 		const existing = shared[existingIndex]
 		saved = {
 			...composition,
-			id: existing.id, // Keep same ID
+			id: existing.id,
 			sharedBy: existing.sharedBy,
 			sharedByUsername: existing.sharedByUsername,
-			sharedAt: existing.sharedAt, // Keep original share date
-			favoriteCount: existing.favoriteCount, // Keep favorite count
-			isReadOnly: true, // Always read-only
-			version: existing.version + 1, // Increment version
+			sharedAt: existing.sharedAt,
+			favoriteCount: existing.favoriteCount,
+			isReadOnly: true,
+			version: existing.version + 1,
 			updatedAt: composition.updatedAt
 		}
 		shared[existingIndex] = saved
 	} else if (existingIndex >= 0 && !isUpdate) {
-		// Already exists, return existing
 		return shared[existingIndex]
 	} else {
-		// New share
 		saved = {
 			...composition,
 			id: `shared-composition-${now}-${Math.random().toString(36).substring(2, 9)}`,
@@ -232,7 +397,7 @@ export function saveSharedComposition(
 			sharedByUsername: getCurrentUsername(),
 			sharedAt: now,
 			favoriteCount: 0,
-			isReadOnly: true, // Always read-only for shared items
+			isReadOnly: true,
 			version: 1
 		}
 		shared.push(saved)
@@ -240,6 +405,20 @@ export function saveSharedComposition(
 	
 	localStorage.setItem(STORAGE_KEY_COMPOSITIONS, JSON.stringify(shared))
 	return saved
+}
+
+/**
+ * Save shared composition to localStorage (helper)
+ */
+function saveLocalSharedComposition(saved: SharedComposition): void {
+	const shared = loadLocalSharedCompositions()
+	const existingIndex = shared.findIndex(s => s.id === saved.id)
+	if (existingIndex >= 0) {
+		shared[existingIndex] = saved
+	} else {
+		shared.push(saved)
+	}
+	localStorage.setItem(STORAGE_KEY_COMPOSITIONS, JSON.stringify(shared))
 }
 
 /**
@@ -290,7 +469,7 @@ export function addSharedFavorite(itemId: string, itemType: 'progression' | 'com
 			localStorage.setItem(STORAGE_KEY_PROGRESSIONS, JSON.stringify(shared))
 		}
 	} else {
-		const shared = loadSharedCompositions()
+		const shared = loadLocalSharedCompositions()
 		const item = shared.find(s => s.id === itemId)
 		if (item) {
 			item.favoriteCount = favorites.filter(f => f.itemId === itemId && f.itemType === 'composition').length
@@ -321,7 +500,7 @@ export function removeSharedFavorite(itemId: string, itemType: 'progression' | '
 			localStorage.setItem(STORAGE_KEY_PROGRESSIONS, JSON.stringify(shared))
 		}
 	} else {
-		const shared = loadSharedCompositions()
+		const shared = loadLocalSharedCompositions()
 		const item = shared.find(s => s.id === itemId)
 		if (item) {
 			item.favoriteCount = filtered.filter(f => f.itemId === itemId && f.itemType === 'composition').length
@@ -344,9 +523,9 @@ export function isSharedItemFavorited(itemId: string, itemType: 'progression' | 
 /**
  * Get shared items sorted by favorite count (for ranking)
  */
-export function getRankedSharedItems() {
+export async function getRankedSharedItems() {
 	const progressions = loadSharedProgressions()
-	const compositions = loadSharedCompositions()
+	const compositions = await loadSharedCompositions()
 	
 	// Sort by favorite count (descending), then by share date (newest first)
 	const rankedProgressions = [...progressions]
@@ -392,7 +571,7 @@ export function deleteSharedItem(itemId: string, itemType: 'progression' | 'comp
 		const filteredFavorites = favorites.filter(f => !(f.itemId === itemId && f.itemType === 'progression'))
 		localStorage.setItem(STORAGE_KEY_FAVORITES, JSON.stringify(filteredFavorites))
 	} else {
-		const shared = loadSharedCompositions()
+		const shared = loadLocalSharedCompositions()
 		const item = shared.find(s => s.id === itemId)
 		if (!item || item.sharedBy !== currentUserId) return false
 		

@@ -248,22 +248,22 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			if (loadedCompositionId) {
 				// Update existing composition
 				const success = await updateComposition(loadedCompositionId, {
-					name: saveModalName.trim(),
-					chords: chords.map(chord => ({
-						id: chord.id,
-						chordId: chord.chordId,
-						openStates: chord.openStates,
-						beats: chord.beats
-					})),
-					tempo,
-					timeSignature,
-					fluteType,
-					tuning
-				})
-				
+				name: saveModalName.trim(),
+				chords: chords.map(chord => ({
+					id: chord.id,
+					chordId: chord.chordId,
+					openStates: chord.openStates,
+					beats: chord.beats
+				})),
+				tempo,
+				timeSignature,
+				fluteType,
+				tuning
+			})
+
 				if (success) {
 					setLoadedCompositionName(saveModalName.trim()) // Update the displayed name
-					setShowSaveModal(false)
+			setShowSaveModal(false)
 					setOpenModalRefresh(prev => prev + 1) // Refresh compositions list
 					onShowToast?.(`Composition "${saveModalName.trim()}" updated successfully!`, 'success')
 				} else {
@@ -291,7 +291,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				setOpenModalRefresh(prev => prev + 1) // Refresh compositions list
 				onShowToast?.(`Composition "${saved.name}" saved successfully!`, 'success')
 			}
-			} catch (error) {
+		} catch (error) {
 			console.error('Error saving composition:', error)
 			onShowToast?.('Error saving composition. Please try again.', 'error')
 		}
@@ -403,8 +403,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			try {
 				const success = await deleteComposition(id)
 				if (success) {
-					setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
-				}
+				setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
+			}
 			} catch (error) {
 				console.error('Error deleting composition:', error)
 				onShowToast?.('Error deleting composition. Please try again.', 'error')
@@ -451,10 +451,10 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	/**
 	 * Handle share composition
 	 */
-	const handleShareComposition = (composition: SavedComposition) => {
+	const handleShareComposition = async (composition: SavedComposition) => {
 		try {
 			// Check if already shared
-			const sharedCompositions = loadSharedCompositions()
+			const sharedCompositions = await loadSharedCompositions()
 			const alreadyShared = sharedCompositions.some(
 				s => s.originalId === composition.id
 			)
@@ -464,7 +464,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				const existing = sharedCompositions.find(s => s.originalId === composition.id)
 				if (existing) {
 					if (confirm(`"${composition.name}" is already shared. Share this updated version?`)) {
-						saveSharedComposition({
+						await saveSharedComposition({
 							originalId: composition.id,
 							name: composition.name,
 							chords: composition.chords,
@@ -483,7 +483,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				}
 			} else {
 				// Share for the first time
-				saveSharedComposition({
+				await saveSharedComposition({
 					originalId: composition.id,
 					name: composition.name,
 					chords: composition.chords,
@@ -805,8 +805,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			{/* Description with info button */}
 			<div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
 				<p className="composer-description" style={{ flex: 1, margin: 0 }}>
-					Create your own musical journey. Select chords, add pauses with the ○ button, adjust rhythm with + and - buttons, and drag to reorder. Choose 4/4 or 3/4 time signature, set your tempo, and toggle the metronome for timing. When you're ready, press Play to hear your creation come to life.
-				</p>
+				Create your own musical journey. Select chords, add pauses with the ○ button, adjust rhythm with + and - buttons, and drag to reorder. Choose 4/4 or 3/4 time signature, set your tempo, and toggle the metronome for timing. When you're ready, press Play to hear your creation come to life.
+			</p>
 				<button 
 					className="section-info-btn"
 					onClick={() => onShowInfo?.()}
@@ -834,16 +834,16 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 					{/* Tempo Control - Extended slider */}
 					<div style={{ display: 'flex', alignItems: 'center', gap: '3px', flex: 1, flexShrink: 0, height: '100%', minWidth: 0 }}>
 						<span style={{ fontSize: '10px', fontWeight: 'var(--font-weight-semibold)', whiteSpace: 'nowrap', lineHeight: '1', flexShrink: 0 }}>Tempo:</span>
-						<input
-							type="range"
-							min="10"
-							max="120"
-							value={tempo}
-							onChange={(e) => setTempo(Number(e.target.value))}
-							className="tempo-slider"
-							disabled={isPlaying}
+					<input
+						type="range"
+						min="10"
+						max="120"
+						value={tempo}
+						onChange={(e) => setTempo(Number(e.target.value))}
+						className="tempo-slider"
+						disabled={isPlaying}
 							style={{ width: '100%', margin: 0, flex: 1, minWidth: 0 }}
-						/>
+					/>
 						<span style={{ fontSize: '10px', fontWeight: 'var(--font-weight-semibold)', whiteSpace: 'nowrap', flexShrink: 0, minWidth: '28px', lineHeight: '1' }}>{tempo}</span>
 					</div>
 
@@ -879,7 +879,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 						{metronomeEnabled ? 'Metronome Off' : 'Metronome On'}
 					</button>
 				</div>
-			</div>
+				</div>
 
 			{/* Add Content Buttons */}
 			<div className="composer-controls" style={{ marginBottom: '16px' }}>
@@ -929,12 +929,12 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				</div>
 			)}
 
-			{chords.length === 0 ? (
-				<div className="composer-empty">
+				{chords.length === 0 ? (
+					<div className="composer-empty">
 					<div className="composer-empty-card-placeholder"></div>
-					<p>Your composition is empty. Add chords from the Library to get started.</p>
-				</div>
-			) : (
+						<p>Your composition is empty. Add chords from the Library to get started.</p>
+					</div>
+				) : (
 				<>
 					{/* Main Large Card with Rhythm Dots Above */}
 					<div className="composer-main-card-container">
@@ -997,116 +997,116 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 					{/* Timeline with Small Cards Below */}
 					<div className="composer-timeline-container">
 						<div className="composer-timeline" ref={sequenceContainerRef}>
-							{chords.map((chord, index) => (
-								<div 
-									key={chord.id} 
+						{chords.map((chord, index) => (
+							<div 
+								key={chord.id} 
 									className={`composer-timeline-item ${selectedChordIndex === index ? 'is-selected' : ''} ${draggedIndex === index ? 'is-dragging' : ''} ${dragOverIndex === index ? 'is-drag-over' : ''}`}
-									draggable={!isPlaying}
-									onDragStart={(e) => handleDragStart(e, index)}
-									onDragOver={(e) => handleDragOver(e, index)}
-									onDragLeave={handleDragLeave}
-									onDrop={(e) => handleDrop(e, index)}
-									onDragEnd={handleDragEnd}
+								draggable={!isPlaying}
+								onDragStart={(e) => handleDragStart(e, index)}
+								onDragOver={(e) => handleDragOver(e, index)}
+								onDragLeave={handleDragLeave}
+								onDrop={(e) => handleDrop(e, index)}
+								onDragEnd={handleDragEnd}
 									onClick={() => {
 										if (draggedIndex === null) {
 											setSelectedChordIndex(index)
 											handleChordClick(chord)
 										}
 									}}
-								>
-									{/* Rhythm Dots */}
+							>
+								{/* Rhythm Dots */}
 									<div className="composer-timeline-rhythm-dots">
-										{Array.from({ length: chord.beats }).map((_, dotIndex) => {
-											const isActive = playingChordIndex === index && playingDotIndex === dotIndex
-											return (
-												<span 
-													key={dotIndex} 
-													className={`composer-rhythm-dot ${isActive ? 'is-active' : ''}`}
-												></span>
-											)
-										})}
-									</div>
+									{Array.from({ length: chord.beats }).map((_, dotIndex) => {
+										const isActive = playingChordIndex === index && playingDotIndex === dotIndex
+										return (
+											<span 
+												key={dotIndex} 
+												className={`composer-rhythm-dot ${isActive ? 'is-active' : ''}`}
+											></span>
+										)
+									})}
+								</div>
 
 									{/* Small Chord Card or Rest */}
 									<div className={`composer-timeline-chord ${chord.chordId === null ? 'is-rest' : ''}`}>
-										{chord.chordId === null ? (
+									{chord.chordId === null ? (
 											<div className="composer-timeline-rest">
-												<svg 
-													viewBox="0 0 120 120" 
+											<svg 
+												viewBox="0 0 120 120" 
 													width="60" 
 													height="60"
-													style={{ pointerEvents: 'none' }}
-												>
-													<circle 
-														cx="60" 
-														cy="60" 
-														r="15"
-														fill="none"
-														stroke="var(--color-black)"
-														strokeWidth="2"
-													/>
-												</svg>
-											</div>
-										) : (
-											<ChordCard
-												value={String(chord.chordId)}
-												openStates={chord.openStates}
-												fluteType={fluteType}
-												onPlay={() => handleChordClick(chord)}
-												hideNotes={false}
-												hideChordNumber={false}
-												fluid={true}
+												style={{ pointerEvents: 'none' }}
+											>
+												<circle 
+													cx="60" 
+													cy="60" 
+													r="15"
+													fill="none"
+													stroke="var(--color-black)"
+													strokeWidth="2"
+												/>
+											</svg>
+										</div>
+									) : (
+										<ChordCard
+											value={String(chord.chordId)}
+											openStates={chord.openStates}
+											fluteType={fluteType}
+											onPlay={() => handleChordClick(chord)}
+											hideNotes={false}
+											hideChordNumber={false}
+											fluid={true}
 												pixelSize={60}
-											/>
-										)}
-									</div>
+										/>
+									)}
+								</div>
 
-									{/* Beats Control */}
+								{/* Beats Control */}
 									<div className="composer-timeline-beats-control">
-										<button
-											className="composer-beats-btn"
+									<button
+										className="composer-beats-btn"
 											onClick={(e) => {
 												e.stopPropagation()
 												handleUpdateBeats(index, chord.beats - 1)
 											}}
-											disabled={chord.beats <= 1}
-										>
-											−
-										</button>
-										<button
-											className="composer-beats-btn"
+										disabled={chord.beats <= 1}
+									>
+										−
+									</button>
+									<button
+										className="composer-beats-btn"
 											onClick={(e) => {
 												e.stopPropagation()
 												handleUpdateBeats(index, chord.beats + 1)
 											}}
 											disabled={chord.beats >= (timeSignature === '3/4' ? 3 : 4)}
-										>
-											+
-										</button>
-									</div>
+									>
+										+
+									</button>
+								</div>
 
-									{/* Remove Button */}
-									<button
+								{/* Remove Button */}
+								<button
 										className="composer-timeline-remove-btn"
 										onClick={(e) => {
 											e.stopPropagation()
 											handleRemoveChord(index)
 										}}
-										title="Remove"
-									>
-										×
-									</button>
-								</div>
-							))}
-						</div>
+									title="Remove"
+								>
+									×
+								</button>
+							</div>
+						))}
 					</div>
+			</div>
 				</>
 			)}
 
 			{/* Composition Management - Below the composition */}
 			<div style={{ marginTop: '24px', marginBottom: '16px' }}>
 				<div className="tabs" style={{ marginBottom: 0 }}>
-					<button 
+				<button 
 						className="btn-sm tab" 
 						onClick={handleNewComposition}
 						disabled={isPlaying}
@@ -1117,8 +1117,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 							<line x1="5" y1="12" x2="19" y2="12"></line>
 						</svg>
 						New
-					</button>
-					<button 
+				</button>
+				<button 
 						className="btn-sm tab" 
 						onClick={() => {
 							if (loadedCompositionId) {
@@ -1129,7 +1129,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 							}
 							setShowSaveModal(true)
 						}}
-						disabled={chords.length === 0}
+					disabled={chords.length === 0}
 						title="Save Composition"
 					>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
@@ -1138,10 +1138,10 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 							<polyline points="7 3 7 8 15 8"></polyline>
 						</svg>
 						Save
-					</button>
-					<button 
+				</button>
+				<button 
 						className="btn-sm tab" 
-						onClick={() => setShowOpenModal(true)}
+					onClick={() => setShowOpenModal(true)}
 						title="Open Composition"
 					>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
@@ -1327,19 +1327,19 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 														<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
 													</svg>
 												</button>
-												<button
-													className="icon-btn-sm"
-													onClick={(e) => {
-														e.stopPropagation()
-														handleDeleteComposition(composition.id, composition.name)
-													}}
-													title="Delete"
-												>
-													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-														<line x1="18" y1="6" x2="6" y2="18"></line>
-														<line x1="6" y1="6" x2="18" y2="18"></line>
-													</svg>
-												</button>
+											<button
+												className="icon-btn-sm"
+												onClick={(e) => {
+													e.stopPropagation()
+													handleDeleteComposition(composition.id, composition.name)
+												}}
+												title="Delete"
+											>
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+													<line x1="18" y1="6" x2="6" y2="18"></line>
+													<line x1="6" y1="6" x2="18" y2="18"></line>
+												</svg>
+											</button>
 											</div>
 										</div>
 									))}
@@ -1486,19 +1486,19 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 															<line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
 														</svg>
 													</button>
-													<button
-														className="icon-btn-sm"
-														onClick={(e) => {
-															e.stopPropagation()
-															handleDeleteProgression(progression.id, progression.name)
-														}}
-														aria-label="Delete progression"
+												<button
+													className="icon-btn-sm"
+													onClick={(e) => {
+														e.stopPropagation()
+														handleDeleteProgression(progression.id, progression.name)
+													}}
+													aria-label="Delete progression"
 														title="Delete progression"
-													>
-														<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-															<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-														</svg>
-													</button>
+												>
+													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+														<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+													</svg>
+												</button>
 												</div>
 											</div>
 									))}

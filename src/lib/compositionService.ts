@@ -91,6 +91,7 @@ export async function syncLocalCompositionsToSupabase(): Promise<number> {
 /**
  * Load all compositions from Supabase or localStorage
  * If logged in, syncs local compositions to Supabase first, then loads from Supabase
+ * Also merges with local storage to ensure nothing is lost
  */
 export async function loadCompositions(): Promise<SavedComposition[]> {
 	if (isSupabaseConfigured()) {
@@ -108,10 +109,14 @@ export async function loadCompositions(): Promise<SavedComposition[]> {
 			// Sync local compositions to Supabase (only once per session)
 			const syncKey = `composition-sync-${session.user.id}`
 			if (!sessionStorage.getItem(syncKey)) {
-				await syncLocalCompositionsToSupabase()
+				const synced = await syncLocalCompositionsToSupabase()
 				sessionStorage.setItem(syncKey, 'true')
+				if (synced > 0) {
+					console.log(`[compositionService] Synced ${synced} compositions to Supabase, reloading...`)
+				}
 			}
 			
+			// Load from Supabase
 			const { data, error } = await supabase
 				.from('compositions')
 				.select('*')
@@ -124,7 +129,7 @@ export async function loadCompositions(): Promise<SavedComposition[]> {
 			}
 			
 			// Transform Supabase data to SavedComposition format
-			return (data || []).map(item => ({
+			const supabaseCompositions = (data || []).map(item => ({
 				id: item.id,
 				name: item.name,
 				chords: item.chords as SavedComposition['chords'],
@@ -135,6 +140,60 @@ export async function loadCompositions(): Promise<SavedComposition[]> {
 				createdAt: new Date(item.created_at).getTime(),
 				updatedAt: new Date(item.updated_at).getTime()
 			}))
+			
+			// Also load local compositions as backup/merge
+			const localCompositions = loadLocal()
+			
+			// Merge: use Supabase IDs as primary, but include any local that don't exist in Supabase
+			const supabaseIds = new Set(supabaseCompositions.map(c => c.id))
+			const localOnly = localCompositions.filter(c => !supabaseIds.has(c.id))
+			
+			if (localOnly.length > 0) {
+				console.log(`[compositionService] Found ${localOnly.length} local compositions not in Supabase, merging...`)
+				// Try to sync these again
+				for (const local of localOnly) {
+					try {
+						const { error: insertError } = await supabase
+							.from('compositions')
+							.insert({
+								user_id: session.user.id,
+								name: local.name,
+								chords: local.chords,
+								tempo: local.tempo,
+								time_signature: local.timeSignature,
+								is_public: false,
+								version: 1
+							})
+						if (!insertError) {
+							console.log(`[compositionService] Synced "${local.name}" to Supabase`)
+						}
+					} catch (err) {
+						console.warn(`[compositionService] Failed to sync "${local.name}":`, err)
+					}
+				}
+				// Reload from Supabase after sync
+				const { data: reloadData } = await supabase
+					.from('compositions')
+					.select('*')
+					.eq('user_id', session.user.id)
+					.order('updated_at', { ascending: false })
+				
+				if (reloadData) {
+					return (reloadData || []).map(item => ({
+						id: item.id,
+						name: item.name,
+						chords: item.chords as SavedComposition['chords'],
+						tempo: item.tempo,
+						timeSignature: item.time_signature as '3/4' | '4/4',
+						fluteType: 'innato',
+						tuning: '440',
+						createdAt: new Date(item.created_at).getTime(),
+						updatedAt: new Date(item.updated_at).getTime()
+					}))
+				}
+			}
+			
+			return supabaseCompositions
 		} catch (error) {
 			console.error('[compositionService] Error loading from Supabase:', error)
 			return loadLocal()

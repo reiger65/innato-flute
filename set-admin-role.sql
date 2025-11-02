@@ -1,24 +1,31 @@
--- Script om admin role toe te voegen aan info@stonewhistle.com
--- Voer uit in: Supabase Dashboard → SQL Editor
+-- ============================================================================
+-- SET ADMIN ROLE - Run dit na Sign Up
+-- ============================================================================
 
--- Check of user bestaat
-SELECT id, email, email_confirmed_at, raw_user_meta_data 
-FROM auth.users 
-WHERE email = 'info@stonewhistle.com';
-
--- Update admin metadata (als account al bestaat)
-UPDATE auth.users 
+-- Bevestig email en zet admin role voor nieuwe account
+UPDATE auth.users
 SET 
-  raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || 
-  jsonb_build_object(
-    'username', 'admin',
-    'role', 'admin'
-  ),
-  email_confirmed_at = COALESCE(email_confirmed_at, NOW())
-WHERE email = 'info@stonewhistle.com';
+  email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
+  raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object(
+    'role', 'admin',
+    'username', COALESCE(raw_user_meta_data->>'username', 'admin')
+  )
+WHERE email = 'info@stonewhistle.com'
+RETURNING 
+  email, 
+  email_confirmed_at, 
+  raw_user_meta_data;
 
--- Verify update
-SELECT id, email, email_confirmed_at, raw_user_meta_data 
-FROM auth.users 
+-- Verify
+SELECT 
+  email,
+  CASE 
+    WHEN email_confirmed_at IS NOT NULL THEN '✅ CONFIRMED' 
+    ELSE '❌ NOT CONFIRMED' 
+  END as email_status,
+  CASE 
+    WHEN raw_user_meta_data->>'role' = 'admin' THEN '✅ ADMIN' 
+    ELSE '❌ NOT ADMIN' 
+  END as role_status
+FROM auth.users
 WHERE email = 'info@stonewhistle.com';
-
