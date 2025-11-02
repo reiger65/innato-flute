@@ -913,6 +913,17 @@ select.btn-sm:active {
 	aspect-ratio: 1 / 1;
 }
 
+.composer-main-rest-symbol svg {
+	width: 100%;
+	height: 100%;
+}
+
+.composer-main-rest-symbol circle {
+	fill: none;
+	stroke: var(--color-black);
+	stroke-width: 2;
+}
+
 .composer-rhythm-dot {
 	width: 8px;
 	height: 8px;
@@ -1873,16 +1884,26 @@ select.btn-sm:active {
 }
 
 .composer-timeline-rest {
-	width: 80px;
-	height: 80px;
+	width: 100%;
+	height: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: var(--font-size-xl);
 	color: rgba(0, 0, 0, 0.3);
-	border: var(--border-2) solid var(--color-black);
-	border-radius: var(--radius-2);
-	background: var(--color-white);
+	border: none;
+	background: transparent;
+}
+
+.composer-timeline-rest svg {
+	width: 100%;
+	height: 100%;
+}
+
+.composer-timeline-rest circle {
+	fill: none;
+	stroke: var(--color-black);
+	stroke-width: 2;
 }
 
 .community-player-modal-actions {
