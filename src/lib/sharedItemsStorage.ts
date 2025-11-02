@@ -164,11 +164,22 @@ async function queryWithRetry<T>(
 	return { data: null, error: { message: 'All retry attempts failed', code: 'RETRY_FAILED' } }
 }
 
-// Detect Safari/iOS
+// Detect Safari/iOS - improved detection
 function isSafari(): boolean {
 	if (typeof navigator === 'undefined') return false
 	const ua = navigator.userAgent.toLowerCase()
-	return ua.includes('safari') && !ua.includes('chrome') && !ua.includes('firefox') || ua.includes('iphone') || ua.includes('ipad')
+	
+	// iOS devices always use Safari
+	if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod')) {
+		return true
+	}
+	
+	// Safari on desktop (but not Chrome/Firefox which also include "safari" in UA)
+	if (ua.includes('safari') && !ua.includes('chrome') && !ua.includes('firefox') && !ua.includes('edge')) {
+		return true
+	}
+	
+	return false
 }
 
 export async function loadSharedCompositions(): Promise<SharedComposition[]> {
@@ -220,6 +231,7 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					const url = `${supabaseUrl}/rest/v1/compositions?select=id,name,chords,tempo,time_signature,created_at,updated_at,user_id,version&is_public=eq.true`
 					
 					console.log('[sharedItemsStorage] Safari: Fetching from REST API:', url.substring(0, 80) + '...')
+					console.log('[sharedItemsStorage] Safari: User Agent:', typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown')
 					
 					const fetchPromise = fetch(url, {
 						method: 'GET',
@@ -228,41 +240,76 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 							'Authorization': `Bearer ${supabaseKey}`,
 							'Content-Type': 'application/json',
 							'Prefer': 'return=representation'
-						}
+						},
+						cache: 'no-cache' // Prevent Safari caching issues
 					})
 					
 					const timeoutPromise = new Promise<Response>((resolve) => {
 						setTimeout(() => {
+							console.warn('[sharedItemsStorage] Safari REST API timeout after 8 seconds')
 							resolve(new Response(null, { status: 408, statusText: 'Timeout' }))
 						}, 8000)
 					})
 					
+					const startTime = Date.now()
 					const response = await Promise.race([fetchPromise, timeoutPromise])
+					const duration = Date.now() - startTime
+					
+					console.log('[sharedItemsStorage] Safari REST API response:', {
+						status: response.status,
+						statusText: response.statusText,
+						ok: response.ok,
+						duration: `${duration}ms`
+					})
 					
 					if (response.ok && response.status !== 408) {
-						const data = await response.json()
-						console.log('[sharedItemsStorage] ✅ Safari REST API succeeded! Loaded', data.length, 'compositions')
-						
-						if (Array.isArray(data) && data.length > 0) {
-							const sortedData = [...data].sort((a: any, b: any) => {
-								const dateA = new Date(a.updated_at || a.created_at).getTime()
-								const dateB = new Date(b.updated_at || b.created_at).getTime()
-								return dateB - dateA
-							})
-							const sharedCompositions = transformSupabaseCompositions(sortedData)
+						try {
+							const data = await response.json()
+							console.log('[sharedItemsStorage] ✅ Safari REST API succeeded! Loaded', data.length, 'compositions')
 							
-							// Merge with localStorage
-							const localShared = loadLocalSharedCompositions()
-							const supabaseIds = new Set(sharedCompositions.map(c => c.id))
-							const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
+							if (!Array.isArray(data)) {
+								console.error('[sharedItemsStorage] Safari: Expected array but got:', typeof data)
+								throw new Error('Invalid response format')
+							}
 							
-							return [...sharedCompositions, ...localOnly]
+							if (Array.isArray(data) && data.length > 0) {
+								const sortedData = [...data].sort((a: any, b: any) => {
+									const dateA = new Date(a.updated_at || a.created_at).getTime()
+									const dateB = new Date(b.updated_at || b.created_at).getTime()
+									return dateB - dateA
+								})
+								const sharedCompositions = transformSupabaseCompositions(sortedData)
+								
+								// Merge with localStorage
+								const localShared = loadLocalSharedCompositions()
+								const supabaseIds = new Set(sharedCompositions.map(c => c.id))
+								const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
+								
+								return [...sharedCompositions, ...localOnly]
+							}
+						} catch (parseErr) {
+							console.error('[sharedItemsStorage] Safari: Error parsing JSON response:', parseErr)
+							throw parseErr
 						}
 					} else {
-						console.warn('[sharedItemsStorage] Safari REST API error:', response.status, response.statusText)
+						let errorText = ''
+						try {
+							errorText = await response.text()
+							console.warn('[sharedItemsStorage] Safari REST API error:', {
+								status: response.status,
+								statusText: response.statusText,
+								body: errorText.substring(0, 200)
+							})
+						} catch (textErr) {
+							console.warn('[sharedItemsStorage] Safari REST API error (could not read body):', response.status, response.statusText)
+						}
 					}
 				} catch (safariErr) {
 					console.error('[sharedItemsStorage] Safari REST API exception:', safariErr)
+					if (safariErr instanceof Error) {
+						console.error('[sharedItemsStorage] Error message:', safariErr.message)
+						console.error('[sharedItemsStorage] Error stack:', safariErr.stack)
+					}
 				}
 				
 				// Try Supabase client as fallback
