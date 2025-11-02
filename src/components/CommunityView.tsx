@@ -146,27 +146,27 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 
 	const sortedItems = getSortedItems()
 
-	// If not authenticated, show login prompt
+	// If not authenticated, show introduction and login prompt
 	if (!isAuthenticated) {
 		return (
 			<div className="community-view">
 				<div className="section-title">Community</div>
-				<div className="section-desc">
-					Discover and share progressions and compositions with other INNATO players.
+				<div className="section-desc" style={{ marginBottom: 'var(--space-4)' }}>
+					Discover and share your favorite progressions and compositions with other INNATO players. Explore what the community has created and let others enjoy your musical explorations.
 				</div>
 				<div style={{
 					textAlign: 'center',
-					padding: 'var(--space-8) var(--space-4)',
+					padding: 'var(--space-6) var(--space-4)',
 					border: 'var(--border-2) solid var(--color-black)',
 					borderRadius: 'var(--radius-2)',
 					background: 'var(--color-white)',
 					marginTop: 'var(--space-4)'
 				}}>
-					<h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-3)' }}>
-						Login Required
+					<h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-2)' }}>
+						Free Account Required
 					</h3>
-					<p style={{ fontSize: 'var(--font-size-base)', color: 'rgba(0, 0, 0, 0.7)', marginBottom: 'var(--space-4)' }}>
-						You need to be logged in to access the Community section. Create an account or log in to share and discover progressions and compositions with other INNATO players.
+					<p style={{ fontSize: 'var(--font-size-base)', color: 'rgba(0, 0, 0, 0.7)', marginBottom: 'var(--space-4)', lineHeight: '1.5' }}>
+						Create a free account to unlock the Community section. Share your progressions and compositions, discover what others have created, and build your musical library together with the INNATO community.
 					</p>
 					<div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'center', flexWrap: 'wrap' }}>
 						<button
@@ -178,7 +178,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 							}}
 							style={{ minWidth: '140px' }}
 						>
-							Login / Sign Up
+							Create Free Account
 						</button>
 					</div>
 				</div>
@@ -191,7 +191,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 			{/* Header */}
 			<div className="section-title">Community</div>
 			<div className="section-desc">
-				Discover and share progressions and compositions with other INNATO players.
+				Discover and share your favorite progressions and compositions with other INNATO players. Explore what the community has created and let others enjoy your musical explorations.
 				{isOffline && (
 					<span style={{ display: 'block', marginTop: 'var(--space-2)', color: 'rgba(0, 0, 0, 0.6)', fontSize: 'var(--font-size-sm)' }}>
 						Offline mode: Only showing local shared items
