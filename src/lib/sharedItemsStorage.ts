@@ -164,13 +164,20 @@ async function queryWithRetry<T>(
 	return { data: null, error: { message: 'All retry attempts failed', code: 'RETRY_FAILED' } }
 }
 
+// Detect iOS devices
+function isIOS(): boolean {
+	if (typeof navigator === 'undefined') return false
+	const ua = navigator.userAgent.toLowerCase()
+	return ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod')
+}
+
 // Detect Safari/iOS - improved detection
 function isSafari(): boolean {
 	if (typeof navigator === 'undefined') return false
 	const ua = navigator.userAgent.toLowerCase()
 	
 	// iOS devices always use Safari
-	if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod')) {
+	if (isIOS()) {
 		return true
 	}
 	
@@ -234,9 +241,10 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			
 			// Try REST API directly via fetch first (works better on Safari/iOS)
 			// This bypasses potential Supabase client issues
-			const useRestApi = isSafari() || true // Always use REST API for now
+			const isIOSDevice = isIOS()
+			const useRestApi = isIOSDevice || isSafari() || true // Always use REST API for now
 			if (useRestApi) {
-				console.log('[sharedItemsStorage] Using REST API fetch approach (Safari:', isSafari(), ')')
+				console.log('[sharedItemsStorage] Using REST API fetch approach (iOS:', isIOSDevice, ', Safari:', isSafari(), ')')
 				try {
 					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
 					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
@@ -250,16 +258,30 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					console.log('[sharedItemsStorage] Safari: Fetching from REST API:', url.substring(0, 80) + '...')
 					console.log('[sharedItemsStorage] Safari: User Agent:', typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown')
 					
-					const fetchPromise = fetch(url, {
+					const headers: Record<string, string> = {
+						'apikey': supabaseKey,
+						'Authorization': `Bearer ${supabaseKey}`,
+						'Content-Type': 'application/json',
+						'Prefer': 'return=representation'
+					}
+					
+					const fetchOptions: RequestInit = {
 						method: 'GET',
-						headers: {
-							'apikey': supabaseKey,
-							'Authorization': `Bearer ${supabaseKey}`,
-							'Content-Type': 'application/json',
-							'Prefer': 'return=representation'
-						},
-						cache: 'no-cache' // Prevent Safari caching issues
+						headers: headers,
+						cache: 'no-cache', // Prevent Safari caching issues
+						mode: 'cors', // Explicitly allow CORS
+						credentials: 'omit' // Don't send cookies (iOS requirement for some CORS scenarios)
+					}
+					
+					console.log('[sharedItemsStorage] Fetch options:', {
+						method: fetchOptions.method,
+						hasApikey: !!headers['apikey'],
+						hasAuth: !!headers['Authorization'],
+						mode: fetchOptions.mode,
+						credentials: fetchOptions.credentials
 					})
+					
+					const fetchPromise = fetch(url, fetchOptions)
 					
 					const timeoutPromise = new Promise<Response>((resolve) => {
 						setTimeout(() => {
