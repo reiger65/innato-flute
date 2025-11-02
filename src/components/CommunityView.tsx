@@ -31,17 +31,34 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 	const [dateFilter, setDateFilter] = useState<DateFilter>('all')
 	const [isOffline, setIsOffline] = useState(false)
 	const [selectedItem, setSelectedItem] = useState<SharedProgression | SharedComposition | null>(null)
+	const [loadingError, setLoadingError] = useState<string | null>(null)
+	const [isLoading, setIsLoading] = useState(true)
 
 	// Load shared items
 	useEffect(() => {
 		const loadItems = async () => {
-			const ranked = await getRankedSharedItems()
-			setSharedItems(ranked)
+			try {
+				setIsLoading(true)
+				setLoadingError(null)
+				const ranked = await getRankedSharedItems()
+				setSharedItems(ranked)
+				
+				// Log for debugging (visible in UI too)
+				const total = ranked.progressions.length + ranked.compositions.length
+				if (total === 0) {
+					setLoadingError('No shared items found. Try refreshing or check if items are shared.')
+				}
+			} catch (error) {
+				console.error('Error loading shared items:', error)
+				setLoadingError(`Error loading shared items: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			} finally {
+				setIsLoading(false)
+			}
 		}
 
 		loadItems()
-		// Refresh every 5 seconds (later: real-time updates from backend)
-		const interval = setInterval(loadItems, 5000)
+		// Refresh every 10 seconds (reduced from 5 to avoid too many requests)
+		const interval = setInterval(loadItems, 10000)
 		return () => clearInterval(interval)
 	}, [])
 
@@ -262,15 +279,58 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				</div>
 			</div>
 
+			{/* Loading/Error Status */}
+			{isLoading && (
+				<div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'rgba(0, 0, 0, 0.6)' }}>
+					<p>Loading shared items...</p>
+				</div>
+			)}
+			
+			{loadingError && !isLoading && (
+				<div style={{ 
+					textAlign: 'center', 
+					padding: 'var(--space-4)', 
+					color: 'rgba(0, 0, 0, 0.8)',
+					background: 'rgba(255, 200, 0, 0.1)',
+					border: '2px solid rgba(255, 200, 0, 0.5)',
+					borderRadius: 'var(--radius-2)',
+					marginBottom: 'var(--space-4)'
+				}}>
+					<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
+						⚠️ {loadingError}
+					</p>
+					<button 
+						className="btn-sm"
+						onClick={() => {
+							setIsLoading(true)
+							setLoadingError(null)
+							getRankedSharedItems()
+								.then(ranked => {
+									setSharedItems(ranked)
+									setIsLoading(false)
+								})
+								.catch(err => {
+									setLoadingError(`Error: ${err instanceof Error ? err.message : 'Failed to load'}`)
+									setIsLoading(false)
+								})
+						}}
+					>
+						Retry
+					</button>
+				</div>
+			)}
+
 			{/* Items Grid */}
-			{sortedItems.length === 0 ? (
+			{!isLoading && sortedItems.length === 0 && !loadingError && (
 				<div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'rgba(0, 0, 0, 0.6)' }}>
 					<p>No shared items yet. Be the first to share something!</p>
 					<p style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
 						Mark progressions as favorite or share compositions to see them here.
 					</p>
 				</div>
-			) : (
+			)}
+			
+			{!isLoading && sortedItems.length > 0 && (
 				<div className="community-grid">
 					{sortedItems.map((item) => {
 						const isProgression = 'chordIds' in item

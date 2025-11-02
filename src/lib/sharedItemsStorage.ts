@@ -145,11 +145,32 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			
 			// Load public compositions from Supabase
 			// This should work even without authentication due to RLS policy
-			const { data, error, count } = await supabase
-				.from('compositions')
-				.select('*', { count: 'exact' })
-				.eq('is_public', true)
-				.order('updated_at', { ascending: false })
+			// Try with simpler query first for better compatibility
+			let data: any = null
+			let error: any = null
+			let count: number | null = null
+			
+			try {
+				const result = await supabase
+					.from('compositions')
+					.select('*', { count: 'exact' })
+					.eq('is_public', true)
+					.order('updated_at', { ascending: false })
+				
+				data = result.data
+				error = result.error
+				count = result.count
+			} catch (queryError) {
+				// If ordering fails, try without order
+				console.warn('[sharedItemsStorage] Query with order failed, trying without order:', queryError)
+				const result = await supabase
+					.from('compositions')
+					.select('*')
+					.eq('is_public', true)
+				
+				data = result.data
+				error = result.error
+			}
 			
 			console.log('[sharedItemsStorage] Query result:', {
 				hasData: !!data,
