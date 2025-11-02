@@ -43,6 +43,18 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				setLoadingError(null)
 				setDebugInfo(prev => [...prev, { message: 'Starting to load items...', timestamp: Date.now() }])
 				
+				// Add more detailed logging for iPhone
+				const isIPhone = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+				if (isIPhone) {
+					setDebugInfo(prev => [...prev, { message: 'iPhone detected - using REST API', timestamp: Date.now() }])
+					console.log('[CommunityView] iPhone detected, checking Supabase config...')
+					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+					console.log('[CommunityView] iPhone Supabase URL:', supabaseUrl ? 'SET' : 'MISSING')
+					console.log('[CommunityView] iPhone Supabase Key:', supabaseKey ? 'SET' : 'MISSING')
+					setDebugInfo(prev => [...prev, { message: `Supabase URL: ${supabaseUrl ? 'SET' : 'MISSING'}`, timestamp: Date.now() }])
+				}
+				
 				const ranked = await getRankedSharedItems()
 				setSharedItems(ranked)
 				
@@ -59,8 +71,12 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				// Only show error if NO items were loaded at all
 				// If items exist but are filtered out, don't show error
 				if (total === 0) {
-					setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
+					const errorMsg = 'No shared items found. Make sure compositions are shared and marked as public in Supabase.'
+					setLoadingError(errorMsg)
 					setDebugInfo(prev => [...prev, { message: '⚠️ No items found after loading', timestamp: Date.now() }])
+					if (isIPhone) {
+						setDebugInfo(prev => [...prev, { message: 'Check console for REST API errors', timestamp: Date.now() }])
+					}
 				} else {
 					setLoadingError(null) // Clear error if items found (even if filtered out)
 					setDebugInfo(prev => [...prev, { message: '✅ Items loaded successfully', timestamp: Date.now() }])
@@ -70,6 +86,13 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				const errorMsg = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
 				setLoadingError(`Error loading shared items: ${error instanceof Error ? error.message : 'Unknown error'}`)
 				setDebugInfo(prev => [...prev, { message: `❌ ${errorMsg}`, timestamp: Date.now() }])
+				if (error instanceof Error) {
+					console.error('[CommunityView] Error stack:', error.stack || 'No stack trace')
+					const stackTrace = error.stack
+					if (stackTrace) {
+						setDebugInfo(prev => [...prev, { message: `Stack: ${stackTrace.substring(0, 100)}...`, timestamp: Date.now() }])
+					}
+				}
 			} finally {
 				setIsLoading(false)
 			}
