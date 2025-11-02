@@ -2,12 +2,20 @@
  * Authentication Service
  * 
  * Abstraction layer for authentication.
- * Currently uses localStorage, will migrate to Supabase later.
+ * Uses Supabase when configured, falls back to localStorage otherwise.
  * 
  * This service provides a consistent interface that can be swapped
  * for database-backed authentication without changing consuming code.
  */
 
+import { isSupabaseConfigured } from './supabaseClient'
+import {
+	getCurrentUser as supabaseGetCurrentUser,
+	signUp as supabaseSignUp,
+	signIn as supabaseSignIn,
+	signOut as supabaseSignOut,
+	isAdmin as supabaseIsAdmin
+} from './supabaseAuthService'
 import { 
 	getCurrentUser as localGetCurrentUser,
 	signUp as localSignUp,
@@ -31,17 +39,18 @@ export interface AuthResult {
 
 /**
  * Check if current user is an admin
- * For now: check email or username
- * Later: check database role or permissions
+ * Uses Supabase check when available, falls back to local check
  */
 export function isAdmin(user: User | null): boolean {
 	if (!user) return false
 	
-	// For now, simple check - can be extended with database role check
-	// Admin emails (can be moved to database config later)
-	const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com'] // TODO: Move to database
-	const adminUsernames = ['admin', 'hanshoukes'] // TODO: Move to database
+	if (isSupabaseConfigured()) {
+		return supabaseIsAdmin(user)
+	}
 	
+	// Fallback to local check
+	const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
+	const adminUsernames = ['admin', 'hanshoukes']
 	return adminEmails.includes(user.email.toLowerCase()) || 
 	       (user.username && adminUsernames.includes(user.username.toLowerCase())) ||
 	       user.role === 'admin'
@@ -49,9 +58,19 @@ export function isAdmin(user: User | null): boolean {
 
 /**
  * Get current user (delegates to auth implementation)
+ * Uses Supabase session when available, falls back to localStorage
  */
 export function getCurrentUser(): User | null {
-	return localGetCurrentUser() as User | null
+	const isSupabase = isSupabaseConfigured()
+	console.log('🔍 getCurrentUser called - isSupabaseConfigured:', isSupabase)
+	if (isSupabase) {
+		const user = supabaseGetCurrentUser()
+		console.log('   Supabase user:', user ? `${user.email} (${user.id})` : 'null')
+		return user
+	}
+	const user = localGetCurrentUser() as User | null
+	console.log('   LocalStorage user:', user ? `${user.email} (${user.id})` : 'null')
+	return user
 }
 
 /**
@@ -63,22 +82,39 @@ export function isAuthenticated(): boolean {
 
 /**
  * Sign up (delegates to auth implementation)
+ * Uses Supabase when available, falls back to localStorage
  */
-export function signUp(email: string, password: string, username?: string): AuthResult {
+export async function signUp(email: string, password: string, username?: string): Promise<AuthResult> {
+	if (isSupabaseConfigured()) {
+		return await supabaseSignUp(email, password, username)
+	}
 	return localSignUp(email, password, username)
 }
 
 /**
  * Sign in (delegates to auth implementation)
+ * Uses Supabase when available, falls back to localStorage
  */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
+	const isSupabase = isSupabaseConfigured()
+	console.log('🔍 authService.signIn - isSupabaseConfigured:', isSupabase)
+	if (isSupabase) {
+		console.log('   → Using Supabase auth')
+		return await supabaseSignIn(email, password)
+	}
+	console.log('   → Using localStorage auth (fallback)')
 	return await localSignIn(email, password)
 }
 
 /**
  * Sign out (delegates to auth implementation)
+ * Uses Supabase when available, falls back to localStorage
  */
-export function signOut(): void {
-	localSignOut()
+export async function signOut(): Promise<void> {
+	if (isSupabaseConfigured()) {
+		await supabaseSignOut()
+	} else {
+		localSignOut()
+	}
 }
 

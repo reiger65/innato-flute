@@ -5,7 +5,7 @@
  * Lessons are stored in localStorage and can be manually managed.
  */
 
-import { loadCompositions } from './compositionStorage'
+import { loadCompositions } from './compositionService'
 
 export interface Lesson {
 	id: string
@@ -230,7 +230,8 @@ export function getLessonsWithProgress(): Lesson[] {
 	
 	// Auto-assign compositions to lessons - this ensures lessons are created from compositions
 	// This will also remove dummy lessons (those without compositionId)
-	assignCompositionsToLessons()
+	// Note: This is called asynchronously from App.tsx, but here we just load existing lessons
+	// The assignment happens in App.tsx when switching to lessons view
 	
 	const progress = loadLessonProgress()
 	let lessons = loadLessons() // Load lessons from localStorage
@@ -275,8 +276,8 @@ export function getCompletedLessonCount(): number {
  * Also creates new lessons for extra compositions
  * If no lessons exist, creates lessons from all compositions
  */
-export function assignCompositionsToLessons(): void {
-	const compositions = loadCompositions()
+export async function assignCompositionsToLessons(): Promise<void> {
+	const compositions = await loadCompositions()
 	const progress = loadLessonProgress()
 	
 	console.log('[assignCompositionsToLessons] Found compositions:', compositions.length, compositions.map(c => c.name))

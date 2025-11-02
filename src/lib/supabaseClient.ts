@@ -17,19 +17,43 @@ function initSupabaseClient(): SupabaseClient | null {
 	const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 	const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+	// Always log - even in production
+	const logInfo = {
+		hasUrl: !!supabaseUrl,
+		hasKey: !!supabaseAnonKey,
+		urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'none',
+		urlValue: supabaseUrl || 'UNDEFINED',
+		keyPreview: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'UNDEFINED'
+	}
+	
+	// Use alert in production if not configured (for debugging)
 	if (!supabaseUrl || !supabaseAnonKey) {
-		console.warn('Supabase not configured. Running in offline/localStorage mode.')
+		console.error('❌❌❌ SUPABASE NOT CONFIGURED ❌❌❌')
+		console.error('⚠️ Supabase not configured. Running in offline/localStorage mode.')
+		console.error('   - VITE_SUPABASE_URL:', supabaseUrl || 'MISSING')
+		console.error('   - VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'SET' : 'MISSING')
+		console.error('   - Full env check:', logInfo)
+		
+		// In production, show alert to help debug
+		if (import.meta.env.PROD && typeof window !== 'undefined') {
+			console.error('🔴 PRODUCTION MODE: Supabase env vars missing!')
+		}
+		
 		return null
 	}
 
 	// Create Supabase client
-	return createClient(supabaseUrl, supabaseAnonKey, {
+	console.log('✅ Creating Supabase client:', logInfo)
+	const client = createClient(supabaseUrl, supabaseAnonKey, {
 		auth: {
 			persistSession: true,
 			autoRefreshToken: true,
 			detectSessionInUrl: true
 		}
 	})
+	
+	console.log('✅ Supabase client created successfully')
+	return client
 }
 
 /**

@@ -141,16 +141,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Triggers for updated_at
+DROP TRIGGER IF EXISTS update_compositions_updated_at ON compositions;
 CREATE TRIGGER update_compositions_updated_at
     BEFORE UPDATE ON compositions
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_progressions_updated_at ON progressions;
 CREATE TRIGGER update_progressions_updated_at
     BEFORE UPDATE ON progressions
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_lessons_updated_at ON lessons;
 CREATE TRIGGER update_lessons_updated_at
     BEFORE UPDATE ON lessons
     FOR EACH ROW
@@ -176,6 +179,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger for favorites_count
+DROP TRIGGER IF EXISTS update_shared_item_favorites_count_trigger ON shared_item_favorites;
 CREATE TRIGGER update_shared_item_favorites_count_trigger
     AFTER INSERT OR DELETE ON shared_item_favorites
     FOR EACH ROW
@@ -197,6 +201,13 @@ ALTER TABLE shared_item_favorites ENABLE ROW LEVEL SECURITY;
 -- ============================================================================
 -- COMPOSITIONS POLICIES
 -- ============================================================================
+
+-- Drop existing policies if they exist (for re-running script)
+DROP POLICY IF EXISTS "Users can read own compositions" ON compositions;
+DROP POLICY IF EXISTS "Anyone can read public compositions" ON compositions;
+DROP POLICY IF EXISTS "Users can insert own compositions" ON compositions;
+DROP POLICY IF EXISTS "Users can update own compositions" ON compositions;
+DROP POLICY IF EXISTS "Users can delete own compositions" ON compositions;
 
 -- Users can read their own compositions
 CREATE POLICY "Users can read own compositions"
@@ -228,6 +239,13 @@ CREATE POLICY "Users can delete own compositions"
 -- PROGRESSIONS POLICIES
 -- ============================================================================
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can read own progressions" ON progressions;
+DROP POLICY IF EXISTS "Anyone can read public progressions" ON progressions;
+DROP POLICY IF EXISTS "Users can insert own progressions" ON progressions;
+DROP POLICY IF EXISTS "Users can update own progressions" ON progressions;
+DROP POLICY IF EXISTS "Users can delete own progressions" ON progressions;
+
 -- Users can read their own progressions
 CREATE POLICY "Users can read own progressions"
     ON progressions FOR SELECT
@@ -258,6 +276,12 @@ CREATE POLICY "Users can delete own progressions"
 -- LESSONS POLICIES
 -- ============================================================================
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Anyone can read lessons" ON lessons;
+DROP POLICY IF EXISTS "Admins can insert lessons" ON lessons;
+DROP POLICY IF EXISTS "Admins can update lessons" ON lessons;
+DROP POLICY IF EXISTS "Admins can delete lessons" ON lessons;
+
 -- Anyone can read lessons
 CREATE POLICY "Anyone can read lessons"
     ON lessons FOR SELECT
@@ -285,6 +309,12 @@ CREATE POLICY "Admins can delete lessons"
 -- USER_PROGRESS POLICIES
 -- ============================================================================
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can read own progress" ON user_progress;
+DROP POLICY IF EXISTS "Users can insert own progress" ON user_progress;
+DROP POLICY IF EXISTS "Users can update own progress" ON user_progress;
+DROP POLICY IF EXISTS "Users can delete own progress" ON user_progress;
+
 -- Users can read their own progress
 CREATE POLICY "Users can read own progress"
     ON user_progress FOR SELECT
@@ -310,6 +340,11 @@ CREATE POLICY "Users can delete own progress"
 -- FAVORITES POLICIES
 -- ============================================================================
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can read own favorites" ON favorites;
+DROP POLICY IF EXISTS "Users can insert own favorites" ON favorites;
+DROP POLICY IF EXISTS "Users can delete own favorites" ON favorites;
+
 -- Users can read their own favorites
 CREATE POLICY "Users can read own favorites"
     ON favorites FOR SELECT
@@ -328,6 +363,12 @@ CREATE POLICY "Users can delete own favorites"
 -- ============================================================================
 -- SHARED_ITEMS POLICIES
 -- ============================================================================
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Anyone can read shared items" ON shared_items;
+DROP POLICY IF EXISTS "Users can insert own shared items" ON shared_items;
+DROP POLICY IF EXISTS "Users can update own shared items" ON shared_items;
+DROP POLICY IF EXISTS "Users can delete own shared items" ON shared_items;
 
 -- Anyone can read shared items
 CREATE POLICY "Anyone can read shared items"
@@ -353,6 +394,11 @@ CREATE POLICY "Users can delete own shared items"
 -- ============================================================================
 -- SHARED_ITEM_FAVORITES POLICIES
 -- ============================================================================
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can read shared item favorites" ON shared_item_favorites;
+DROP POLICY IF EXISTS "Users can insert own shared item favorites" ON shared_item_favorites;
+DROP POLICY IF EXISTS "Users can delete own shared item favorites" ON shared_item_favorites;
 
 -- Users can read favorites for shared items
 CREATE POLICY "Users can read shared item favorites"

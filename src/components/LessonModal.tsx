@@ -5,7 +5,8 @@ import type { FluteType, TuningFrequency } from '../lib/fluteData'
 import type { Lesson } from '../lib/lessonsData'
 import { saveLessonProgress } from '../lib/lessonsData'
 import { simplePlayer } from '../lib/simpleAudioPlayer'
-import { getComposition, type SavedComposition } from '../lib/compositionStorage'
+import { getComposition } from '../lib/compositionService'
+import type { SavedComposition } from '../lib/compositionStorage'
 
 interface LessonModalProps {
 	lesson: Lesson
@@ -32,13 +33,16 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 
 	// Load composition when modal opens
 	useEffect(() => {
-		if (lesson.compositionId) {
-			const comp = getComposition(lesson.compositionId)
-			setComposition(comp)
-			if (comp && comp.chords.length > 0) {
-				setSelectedChordIndex(0)
+		const loadComp = async () => {
+			if (lesson.compositionId) {
+				const comp = await getComposition(lesson.compositionId)
+				setComposition(comp || null)
+				if (comp && comp.chords.length > 0) {
+					setSelectedChordIndex(0)
+				}
 			}
 		}
+		loadComp()
 	}, [lesson.compositionId])
 
 	if (!lesson.compositionId || !composition) {

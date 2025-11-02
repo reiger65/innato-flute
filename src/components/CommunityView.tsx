@@ -8,8 +8,8 @@ import {
 	addSharedFavorite,
 	removeSharedFavorite
 } from '../lib/sharedItemsStorage'
-import { saveProgression } from '../lib/progressionStorage'
-import { saveComposition } from '../lib/compositionStorage'
+import { saveProgression } from '../lib/progressionService'
+import { saveComposition } from '../lib/compositionService'
 
 interface CommunityViewProps {
 	fluteType: FluteType
@@ -110,16 +110,16 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 	}
 
 
-	const handleSaveProgression = (progression: SharedProgression) => {
-		const saved = saveProgression({
+	const handleSaveProgression = async (progression: SharedProgression) => {
+		const saved = await saveProgression({
 			name: progression.name,
 			chordIds: progression.chordIds
 		})
 		alert(`Progression "${saved.name}" saved to your library!`)
 	}
 
-	const handleSaveComposition = (composition: SharedComposition) => {
-		const saved = saveComposition({
+	const handleSaveComposition = async (composition: SharedComposition) => {
+		const saved = await saveComposition({
 			name: composition.name,
 			chords: composition.chords,
 			tempo: composition.tempo,

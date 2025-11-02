@@ -41,21 +41,73 @@ export function isAdmin(user: User | null): boolean {
 	       user.role === 'admin'
 }
 
+// Cache voor Supabase session (wordt gezet na sign in)
+let cachedSupabaseUser: User | null = null
+
 /**
  * Get current user from Supabase session or localStorage
+ * Note: This checks cached session first, then localStorage
+ * For real-time updates, use onAuthStateChange listener
  */
 export function getCurrentUser(): User | null {
 	if (isSupabaseConfigured()) {
 		const supabase = getSupabaseClient()
 		if (supabase) {
-			// Get session from Supabase
-			// For now, still use localStorage as fallback
-			// TODO: Implement full Supabase auth session management
+			// Return cached user if available
+			if (cachedSupabaseUser) {
+				return cachedSupabaseUser
+			}
+			
+			// Try to get from Supabase's localStorage
+			// Supabase stores session in: sb-<project-ref>-auth-token
+			try {
+				const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+				if (supabaseUrl) {
+					const projectRef = supabaseUrl.split('//')[1]?.split('.')[0]
+					if (projectRef) {
+						const storageKey = `sb-${projectRef}-auth-token`
+						const sessionData = localStorage.getItem(storageKey)
+						if (sessionData) {
+							try {
+								const parsed = JSON.parse(sessionData)
+								// Supabase stores session in different formats, check both
+								const session = parsed?.currentSession || parsed
+								if (session?.user) {
+									const userData = session.user
+									const user: User = {
+										id: userData.id,
+										email: userData.email || '',
+										username: userData.user_metadata?.username,
+										role: userData.user_metadata?.role,
+										createdAt: new Date(userData.created_at).getTime()
+									}
+									cachedSupabaseUser = user
+									return user
+								}
+							} catch (e) {
+								// Ignore parse errors
+							}
+						}
+					}
+				}
+			} catch (error) {
+				console.error('Error getting Supabase session:', error)
+			}
+			
+			// Also try async getSession as fallback (but we need sync, so this is just for initialization)
+			// In practice, we should use onAuthStateChange listener to update cache
 		}
 	}
 	
 	// Fallback to localStorage
 	return localGetCurrentUser() as User | null
+}
+
+/**
+ * Update cached user (call after sign in/up)
+ */
+export function setCachedUser(user: User | null): void {
+	cachedSupabaseUser = user
 }
 
 /**
@@ -85,8 +137,10 @@ export async function signUp(email: string, password: string, username?: string)
 						id: data.user.id,
 						email: data.user.email || email,
 						username: data.user.user_metadata?.username || username,
+						role: data.user.user_metadata?.role,
 						createdAt: Date.now()
 					}
+					setCachedUser(user)
 					return { success: true, user }
 				}
 			} catch (error) {
@@ -104,28 +158,57 @@ export async function signUp(email: string, password: string, username?: string)
  * Sign in with Supabase or localStorage
  */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
+	console.log('🔍 signIn called, checking Supabase config...')
+	console.log('   - isSupabaseConfigured:', isSupabaseConfigured())
+	
 	if (isSupabaseConfigured()) {
 		const supabase = getSupabaseClient()
+		console.log('   - supabase client:', supabase ? 'found' : 'null')
+		
 		if (supabase) {
 			try {
+				console.log('   - Attempting Supabase signInWithPassword...')
 				const { data, error } = await supabase.auth.signInWithPassword({
 					email,
 					password
 				})
+				console.log('   - Supabase response received:', { hasData: !!data, hasError: !!error })
 				
 				if (error) {
-					return { success: false, error: error.message }
+					console.error('Supabase signin error details:', {
+						message: error.message,
+						status: error.status,
+						name: error.name
+					})
+					
+					// More specific error messages
+					if (error.message.includes('Invalid login credentials') || error.message.includes('invalid')) {
+						return { success: false, error: 'Invalid email or password' }
+					} else if (error.message.includes('email') && error.message.includes('confirm')) {
+						return { success: false, error: 'Please check your email to confirm your account' }
+					}
+					return { success: false, error: error.message || 'Login failed. Please check your credentials.' }
 				}
 				
-				if (data.user) {
+				if (data.user && data.session) {
 					const user: User = {
 						id: data.user.id,
 						email: data.user.email || email,
 						username: data.user.user_metadata?.username,
+						role: data.user.user_metadata?.role,
 						createdAt: new Date(data.user.created_at).getTime()
 					}
+					setCachedUser(user)
+					console.log('✅ Login successful:', user.email)
 					return { success: true, user }
+				} else if (data.user && !data.session) {
+					// User exists but needs email confirmation
+					console.warn('⚠️ User exists but no session - email not confirmed?')
+					return { success: false, error: 'Please check your email to confirm your account. If you already confirmed, try resetting your password.' }
 				}
+				
+				console.error('❌ Login failed: No user or session returned')
+				return { success: false, error: 'Login failed. Please try again.' }
 			} catch (error) {
 				console.error('Supabase signin error:', error)
 				return { success: false, error: 'Sign in failed. Please try again.' }
@@ -134,6 +217,7 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 	}
 	
 	// Fallback to localStorage
+	console.log('   - Using localStorage fallback (Supabase not configured)')
 	return await localSignIn(email, password)
 }
 
@@ -146,6 +230,7 @@ export async function signOut(): Promise<void> {
 		if (supabase) {
 			try {
 				await supabase.auth.signOut()
+				setCachedUser(null)
 			} catch (error) {
 				console.error('Supabase signout error:', error)
 			}

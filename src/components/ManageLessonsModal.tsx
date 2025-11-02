@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { loadLessons, updateLesson, deleteLesson, reorderLessons, type Lesson } from '../lib/lessonsService'
-import { getComposition } from '../lib/compositionStorage'
+import { getComposition } from '../lib/compositionService'
 
 interface ManageLessonsModalProps {
 	isOpen: boolean
@@ -198,10 +198,26 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		return match ? parseInt(match[1], 10) : 0
 	}
 
+	const [compositionNames, setCompositionNames] = useState<Map<string, string>>(new Map())
+
+	// Load composition names
+	useEffect(() => {
+		const loadNames = async () => {
+			const names = new Map<string, string>()
+			for (const lesson of lessons) {
+				if (lesson.compositionId && !names.has(lesson.compositionId)) {
+					const comp = await getComposition(lesson.compositionId)
+					names.set(lesson.compositionId, comp ? comp.name : 'Composition not found')
+				}
+			}
+			setCompositionNames(names)
+		}
+		loadNames()
+	}, [lessons])
+
 	const getCompositionName = (compositionId: string | null): string => {
 		if (!compositionId) return 'No composition'
-		const composition = getComposition(compositionId)
-		return composition ? composition.name : 'Composition not found'
+		return compositionNames.get(compositionId) || 'Loading...'
 	}
 
 	const getCategoryBadgeColor = (category: string) => {

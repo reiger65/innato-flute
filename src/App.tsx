@@ -12,10 +12,10 @@ import { ToastContainer, useToast } from './components/Toast'
 import { fingeringToOpenStates, getFingeringForChord, getChordIdFromFingering } from './lib/chordMappings'
 import { simplePlayer, type TuningFrequency } from './lib/simpleAudioPlayer'
 import { type FluteType, getNoteForFingering, openStatesToFingering, getNotesFromOpenStates } from './lib/fluteData'
-import { getCurrentUser, type User } from './lib/localAuth'
-import { isAdmin } from './lib/authService'
+import { getCurrentUser, type User, isAdmin } from './lib/authService'
+import { getSupabaseClient } from './lib/supabaseClient'
 import { getLessonsWithProgress, getCompletedLessonCount, assignCompositionsToLessons, type Lesson } from './lib/lessonsData'
-import { saveProgression, loadProgressions, deleteProgression, type SavedProgression } from './lib/progressionStorage'
+import { saveProgression, loadProgressions, deleteProgression, type SavedProgression } from './lib/progressionService'
 import { saveSharedProgression, loadSharedProgressions } from './lib/sharedItemsStorage'
 import { type SavedComposition } from './lib/compositionStorage'
 import './styles/components.css'
@@ -90,6 +90,7 @@ export default function App() {
 	const [showComposeInfo, setShowComposeInfo] = useState(false)
 	const [showLessonsInfo, setShowLessonsInfo] = useState(false)
 	const [showAdvancedInfo, setShowAdvancedInfo] = useState(false)
+	const [savedProgressions, setSavedProgressions] = useState<SavedProgression[]>([])
 	const composerViewRef = useRef<ComposerViewRef>(null)
 	const toast = useToast()
 	
@@ -128,6 +129,28 @@ export default function App() {
 		const user = getCurrentUser()
 		setCurrentUser(user)
 		
+		// Listen for Supabase auth state changes
+		const supabase = getSupabaseClient()
+		let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null
+		
+		if (supabase) {
+			const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
+				if (session?.user) {
+					const user: User = {
+						id: session.user.id,
+						email: session.user.email || '',
+						username: session.user.user_metadata?.username,
+						role: session.user.user_metadata?.role,
+						createdAt: new Date(session.user.created_at).getTime()
+					}
+					setCurrentUser(user)
+				} else {
+					setCurrentUser(null)
+				}
+			})
+			authListener = { data: { subscription } }
+		}
+		
 		// Listen for storage changes (login/logout from other tabs)
 		const handleStorageChange = () => {
 			const user = getCurrentUser()
@@ -135,7 +158,13 @@ export default function App() {
 		}
 		
 		window.addEventListener('storage', handleStorageChange)
-		return () => window.removeEventListener('storage', handleStorageChange)
+		
+		return () => {
+			window.removeEventListener('storage', handleStorageChange)
+			if (authListener?.data?.subscription) {
+				authListener.data.subscription.unsubscribe()
+			}
+		}
 	}, [])
 
 	// Load lessons with progress
@@ -153,11 +182,24 @@ export default function App() {
 		return () => clearInterval(interval)
 	}, [loadLessons])
 
+	// Load progressions on mount and when refresh triggers
+	useEffect(() => {
+		const loadProgs = async () => {
+			try {
+				const progs = await loadProgressions()
+				setSavedProgressions(progs)
+			} catch (error) {
+				console.error('Error loading progressions:', error)
+			}
+		}
+		loadProgs()
+	}, [progressionModalRefresh])
+
 	// Reload lessons when switching to lessons view and auto-assign compositions
 	useEffect(() => {
 		if (activeView === 'lessons') {
 			// Auto-assign compositions to lessons
-			assignCompositionsToLessons()
+			assignCompositionsToLessons().catch(err => console.error('Error assigning compositions:', err))
 			loadLessons()
 		}
 	}, [activeView, loadLessons])
@@ -489,14 +531,14 @@ export default function App() {
 	/**
 	 * Handle saving progression with name
 	 */
-	const handleSaveProgressionConfirm = () => {
+	const handleSaveProgressionConfirm = async () => {
 		if (selectedChordIds.length < 2 || !progressionName.trim()) {
 			return
 		}
 		
 		try {
 			// Save progression to local storage
-			const saved = saveProgression({
+			const saved = await saveProgression({
 				name: progressionName.trim(),
 				chordIds: selectedChordIds
 			})
@@ -524,10 +566,11 @@ export default function App() {
 	/**
 	 * Handle delete progression
 	 */
-	const handleDeleteProgression = (id: string, name: string) => {
+	const handleDeleteProgression = async (id: string, name: string) => {
 		if (window.confirm(`Delete progression "${name}"?`)) {
 			try {
-				if (deleteProgression(id)) {
+				const success = await deleteProgression(id)
+				if (success) {
 					setProgressionModalRefresh(prev => prev + 1)
 					toast.showSuccess(`Progression "${name}" deleted successfully.`)
 				} else {
@@ -2558,13 +2601,13 @@ export default function App() {
 							<h2 className="modal-title">Manage Progressions</h2>
 						</div>
 						<div className="modal-body" style={{ maxHeight: '400px', overflowY: 'auto' }} key={progressionModalRefresh}>
-							{loadProgressions().length === 0 ? (
+							{savedProgressions.length === 0 ? (
 								<p style={{ textAlign: 'center', color: 'rgba(0, 0, 0, 0.6)', padding: 'var(--space-4)' }}>
 									No progressions saved yet. Select 2+ chords in the Library and save them as a progression.
 								</p>
 							) : (
 								<div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-									{loadProgressions().map((progression) => (
+									{savedProgressions.map((progression) => (
 										<div
 											key={progression.id}
 											style={{

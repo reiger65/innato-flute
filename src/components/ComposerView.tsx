@@ -5,8 +5,8 @@ import { fingeringToOpenStates, getFingeringForChord } from '../lib/chordMapping
 import { getNotesFromOpenStates } from '../lib/fluteData'
 import type { FluteType, TuningFrequency } from '../lib/fluteData'
 import { simplePlayer } from '../lib/simpleAudioPlayer'
-import { saveComposition, loadCompositions, deleteComposition, updateComposition, type SavedComposition } from '../lib/compositionStorage'
-import { loadProgressions, deleteProgression, type SavedProgression } from '../lib/progressionStorage'
+import { saveComposition, loadCompositions, deleteComposition, updateComposition, type SavedComposition } from '../lib/compositionService'
+import { loadProgressions, deleteProgression, type SavedProgression } from '../lib/progressionService'
 import { saveSharedComposition, loadSharedCompositions, saveSharedProgression, loadSharedProgressions } from '../lib/sharedItemsStorage'
 import { getCurrentUser, isAdmin } from '../lib/authService'
 import { AddToLessonsModal } from './AddToLessonsModal'
@@ -58,10 +58,30 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	const [progressionModalRefresh, setProgressionModalRefresh] = useState(0) // Used to force re-render of progression modal
 	const [currentUser, setCurrentUser] = useState(getCurrentUser())
 	const [showAddToLessonsModal, setShowAddToLessonsModal] = useState(false)
+	// State for compositions and progressions
+	const [savedCompositions, setSavedCompositions] = useState<SavedComposition[]>([])
+	const [savedProgressions, setSavedProgressions] = useState<SavedProgression[]>([])
 	const isPlayingRef = useRef(false)
 	const metronomeIntervalRef = useRef<number | null>(null)
 	const isPlayingMetronomeRef = useRef(false)
 	const sequenceContainerRef = useRef<HTMLDivElement | null>(null)
+
+	// Load compositions and progressions on mount and when refresh triggers
+	useEffect(() => {
+		const loadData = async () => {
+			try {
+				const [comps, progs] = await Promise.all([
+					loadCompositions(),
+					loadProgressions()
+				])
+				setSavedCompositions(comps)
+				setSavedProgressions(progs)
+			} catch (error) {
+				console.error('Error loading data:', error)
+			}
+		}
+		loadData()
+	}, [openModalRefresh, progressionModalRefresh])
 
 	/**
 	 * Add chord(s) to the composition (public method that can be called from parent)
@@ -213,7 +233,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	/**
 	 * Handle save composition
 	 */
-	const handleSaveComposition = () => {
+	const handleSaveComposition = async () => {
 		if (!saveModalName.trim()) {
 			onShowToast?.('Please enter a name for your composition', 'warning')
 			return
@@ -227,7 +247,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 		try {
 			if (loadedCompositionId) {
 				// Update existing composition
-				const success = updateComposition(loadedCompositionId, {
+				const success = await updateComposition(loadedCompositionId, {
 					name: saveModalName.trim(),
 					chords: chords.map(chord => ({
 						id: chord.id,
@@ -244,13 +264,14 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				if (success) {
 					setLoadedCompositionName(saveModalName.trim()) // Update the displayed name
 					setShowSaveModal(false)
+					setOpenModalRefresh(prev => prev + 1) // Refresh compositions list
 					onShowToast?.(`Composition "${saveModalName.trim()}" updated successfully!`, 'success')
 				} else {
 					onShowToast?.('Error updating composition. Please try again.', 'error')
 				}
 			} else {
 				// Create new composition
-				const saved = saveComposition({
+				const saved = await saveComposition({
 					name: saveModalName.trim(),
 					chords: chords.map(chord => ({
 						id: chord.id,
@@ -267,6 +288,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				setLoadedCompositionId(saved.id) // Track the newly saved composition
 				setLoadedCompositionName(saved.name) // Track the saved composition name for display
 				setShowSaveModal(false)
+				setOpenModalRefresh(prev => prev + 1) // Refresh compositions list
 				onShowToast?.(`Composition "${saved.name}" saved successfully!`, 'success')
 			}
 			} catch (error) {
@@ -314,10 +336,11 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	/**
 	 * Handle delete progression
 	 */
-	const handleDeleteProgression = (id: string, name: string) => {
+	const handleDeleteProgression = async (id: string, name: string) => {
 		if (window.confirm(`Delete progression "${name}"?`)) {
 			try {
-				if (deleteProgression(id)) {
+				const success = await deleteProgression(id)
+				if (success) {
 					setProgressionModalRefresh(prev => prev + 1)
 				}
 			} catch (error) {
@@ -375,10 +398,16 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	/**
 	 * Handle delete composition
 	 */
-	const handleDeleteComposition = (id: string, name: string) => {
+	const handleDeleteComposition = async (id: string, name: string) => {
 		if (confirm(`Are you sure you want to delete "${name}"?`)) {
-			if (deleteComposition(id)) {
-				setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
+			try {
+				const success = await deleteComposition(id)
+				if (success) {
+					setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
+				}
+			} catch (error) {
+				console.error('Error deleting composition:', error)
+				onShowToast?.('Error deleting composition. Please try again.', 'error')
 			}
 		}
 	}
@@ -392,23 +421,29 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 		setShowRenameModal(true)
 	}
 
-	const handleSaveRename = () => {
+	const handleSaveRename = async () => {
 		if (!renameCompositionId || !renameCompositionName.trim()) {
 			return
 		}
 
-		if (updateComposition(renameCompositionId, { name: renameCompositionName.trim() })) {
-			// If the renamed composition is currently loaded, update the displayed name
-			if (loadedCompositionId === renameCompositionId) {
-				setLoadedCompositionName(renameCompositionName.trim())
-				setSaveModalName(renameCompositionName.trim())
+		try {
+			const success = await updateComposition(renameCompositionId, { name: renameCompositionName.trim() })
+			if (success) {
+				// If the renamed composition is currently loaded, update the displayed name
+				if (loadedCompositionId === renameCompositionId) {
+					setLoadedCompositionName(renameCompositionName.trim())
+					setSaveModalName(renameCompositionName.trim())
+				}
+				setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
+				setShowRenameModal(false)
+				setRenameCompositionId(null)
+				setRenameCompositionName('')
+				onShowToast?.(`Composition renamed to "${renameCompositionName.trim()}"`, 'success')
+			} else {
+				onShowToast?.('Error renaming composition. Please try again.', 'error')
 			}
-			setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
-			setShowRenameModal(false)
-			setRenameCompositionId(null)
-			setRenameCompositionName('')
-			onShowToast?.(`Composition renamed to "${renameCompositionName.trim()}"`, 'success')
-		} else {
+		} catch (error) {
+			console.error('Error renaming composition:', error)
 			onShowToast?.('Error renaming composition. Please try again.', 'error')
 		}
 	}
@@ -1087,7 +1122,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 						className="btn-sm tab" 
 						onClick={() => {
 							if (loadedCompositionId) {
-								const comp = loadCompositions().find(c => c.id === loadedCompositionId)
+								const comp = savedCompositions.find(c => c.id === loadedCompositionId)
 								if (comp) {
 									setSaveModalName(comp.name)
 								}
@@ -1211,13 +1246,13 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 							<h2 className="modal-title">Open Composition</h2>
 						</div>
 						<div className="modal-body">
-							{loadCompositions().length === 0 ? (
+							{savedCompositions.length === 0 ? (
 								<p style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'rgba(0, 0, 0, 0.6)' }}>
 									No saved compositions yet. Save your first composition to get started!
 								</p>
 							) : (
 								<div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', maxHeight: '400px', overflowY: 'auto' }} key={openModalRefresh}>
-									{loadCompositions().map((composition) => (
+									{savedCompositions.map((composition) => (
 										<div 
 											key={composition.id} 
 											style={{ 
@@ -1377,13 +1412,13 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 							<h2 className="modal-title">Add Progression</h2>
 						</div>
 						<div className="modal-body" style={{ maxHeight: '400px', overflowY: 'auto' }} key={progressionModalRefresh}>
-							{loadProgressions().length === 0 ? (
+							{savedProgressions.length === 0 ? (
 								<p style={{ textAlign: 'center', color: 'rgba(0, 0, 0, 0.6)', padding: 'var(--space-4)' }}>
 									No progressions saved yet. Save progressions in the Library.
 								</p>
 							) : (
 								<div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-									{loadProgressions().map((progression) => (
+									{savedProgressions.map((progression) => (
 											<div
 												key={progression.id}
 												style={{

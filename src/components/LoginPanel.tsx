@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { User } from '../lib/localAuth'
-import { signUp, signIn, signOut, getCurrentUser } from '../lib/localAuth'
+import type { User } from '../lib/authService'
+import { signUp, signIn, signOut, getCurrentUser } from '../lib/authService'
 
 interface LoginPanelProps {
 	onClose: () => void
@@ -42,7 +42,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 			return
 		}
 
-		const result = signUp(email, password, username)
+		const result = await signUp(email, password, username)
 		setLoading(false)
 
 		if (result.success && result.user) {
@@ -58,30 +58,48 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 
 	const handleSignIn = async (e: React.FormEvent) => {
 		e.preventDefault()
+		// Always log - even in production
+		console.log('🔐🔐🔐 LOGIN ATTEMPT STARTED 🔐🔐🔐')
+		console.log('   Email:', email)
+		console.log('   Has password:', !!password)
 		setError('')
 		setLoading(true)
 
 		if (!email || !password) {
+			console.warn('⚠️ Missing email or password')
 			setError('Please fill in all fields')
 			setLoading(false)
 			return
 		}
 
-		const result = await signIn(email, password)
-		setLoading(false)
+		console.log('📤 Calling signIn function...')
+		try {
+			const result = await signIn(email, password)
+			console.log('📥 SignIn result:', result)
+			setLoading(false)
 
-		if (result.success && result.user) {
-			setCurrentUser(result.user)
-			onAuthChange(result.user)
-			setEmail('')
-			setPassword('')
-		} else {
-			setError(result.error || 'Invalid email or password')
+			if (result.success && result.user) {
+				console.log('✅✅✅ LOGIN SUCCESSFUL ✅✅✅')
+				console.log('   User:', result.user)
+				setCurrentUser(result.user)
+				onAuthChange(result.user)
+				setEmail('')
+				setPassword('')
+			} else {
+				console.error('❌❌❌ LOGIN FAILED ❌❌❌')
+				console.error('   Error:', result.error)
+				setError(result.error || 'Invalid email or password')
+			}
+		} catch (error) {
+			console.error('💥💥💥 EXCEPTION DURING LOGIN 💥💥💥')
+			console.error('   Error:', error)
+			setLoading(false)
+			setError('An error occurred during login. Please check the console.')
 		}
 	}
 
-	const handleSignOut = () => {
-		signOut()
+	const handleSignOut = async () => {
+		await signOut()
 		setCurrentUser(null)
 		onAuthChange(null)
 	}
