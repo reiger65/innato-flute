@@ -176,9 +176,7 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 					})
 					
 					// Use REST API directly - more reliable on Safari
-					// Add cache-busting timestamp to prevent browser caching
-					const cacheBuster = Date.now()
-					const url = `${supabaseUrl}/rest/v1/progressions?select=id,name,chord_ids,created_at,updated_at,user_id,version&is_public=eq.true&_t=${cacheBuster}`
+					const url = `${supabaseUrl}/rest/v1/progressions?select=id,name,chord_ids,created_at,updated_at,user_id,version&is_public=eq.true`
 					
 					console.log('[sharedItemsStorage] Full REST API URL for progressions:', url)
 					
@@ -610,9 +608,7 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					
 					// Use REST API directly - more reliable on Safari
 					// URL encode the filter parameter properly
-					// Add cache-busting timestamp to prevent browser caching
-					const cacheBuster = Date.now()
-					const url = `${supabaseUrl}/rest/v1/compositions?select=id,name,chords,tempo,time_signature,created_at,updated_at,user_id,version&is_public=eq.true&_t=${cacheBuster}`
+					const url = `${supabaseUrl}/rest/v1/compositions?select=id,name,chords,tempo,time_signature,created_at,updated_at,user_id,version&is_public=eq.true`
 					
 					console.log('[sharedItemsStorage] Full REST API URL:', url)
 					
