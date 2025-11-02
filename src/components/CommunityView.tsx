@@ -46,7 +46,9 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				// Log for debugging (visible in UI too)
 				const total = ranked.progressions.length + ranked.compositions.length
 				if (total === 0) {
-					setLoadingError('No shared items found. Try refreshing or check if items are shared.')
+					setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
+				} else {
+					setLoadingError(null) // Clear error if items found
 				}
 			} catch (error) {
 				console.error('Error loading shared items:', error)
@@ -299,6 +301,9 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 					<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
 						⚠️ {loadingError}
 					</p>
+					<p style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)', color: 'rgba(0, 0, 0, 0.6)' }}>
+						Are you logged in? Make sure you're logged in with the same account on both devices.
+					</p>
 					<button 
 						className="btn-sm"
 						onClick={() => {
@@ -307,6 +312,12 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 							getRankedSharedItems()
 								.then(ranked => {
 									setSharedItems(ranked)
+									const total = ranked.progressions.length + ranked.compositions.length
+									if (total === 0) {
+										setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
+									} else {
+										setLoadingError(null)
+									}
 									setIsLoading(false)
 								})
 								.catch(err => {

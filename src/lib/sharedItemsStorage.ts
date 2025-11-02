@@ -139,112 +139,107 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			
 			console.log('[sharedItemsStorage] Loading public compositions from Supabase...')
 			
-			// Check session status
-			const { data: sessionData } = await supabase.auth.getSession()
-			console.log('[sharedItemsStorage] Session status:', sessionData?.session ? 'authenticated' : 'anonymous')
+			// Check session status but don't require it for public items
+			let sessionStatus = 'unknown'
+			try {
+				const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+				sessionStatus = sessionError ? 'error' : (sessionData?.session ? 'authenticated' : 'anonymous')
+				console.log('[sharedItemsStorage] Session status:', sessionStatus)
+			} catch (sessionErr) {
+				console.warn('[sharedItemsStorage] Could not check session (might be anonymous):', sessionErr)
+				sessionStatus = 'anonymous'
+			}
 			
-			// Load public compositions from Supabase
-			// This should work even without authentication due to RLS policy
-			// Try with simpler query first for better compatibility
+			// Try querying public compositions - should work even without authentication
+			// Strategy 1: Simplest query first (most compatible)
 			let data: any = null
 			let error: any = null
-			let count: number | null = null
 			
+			console.log('[sharedItemsStorage] Attempting query (strategy 1: simplest)...')
 			try {
 				const result = await supabase
 					.from('compositions')
-					.select('*', { count: 'exact' })
+					.select('*')
 					.eq('is_public', true)
-					.order('updated_at', { ascending: false })
 				
 				data = result.data
 				error = result.error
-				count = result.count
+				
+				if (error) {
+					console.error('[sharedItemsStorage] Strategy 1 error:', error.code, error.message, error.hint)
+				} else if (data) {
+					console.log('[sharedItemsStorage] Strategy 1 succeeded! Loaded', data.length, 'compositions')
+					// Sort manually by updated_at (newest first)
+					data.sort((a: any, b: any) => {
+						const dateA = new Date(a.updated_at || a.created_at).getTime()
+						const dateB = new Date(b.updated_at || b.created_at).getTime()
+						return dateB - dateA
+					})
+				}
 			} catch (queryError) {
-				// If ordering fails, try without order
-				console.warn('[sharedItemsStorage] Query with order failed, trying without order:', queryError)
-				const result = await supabase
-					.from('compositions')
-					.select('*')
-					.eq('is_public', true)
-				
-				data = result.data
-				error = result.error
+				console.error('[sharedItemsStorage] Strategy 1 exception:', queryError)
+				error = queryError
 			}
 			
-			console.log('[sharedItemsStorage] Query result:', {
-				hasData: !!data,
-				dataLength: data?.length || 0,
-				hasError: !!error,
-				count: count || 'N/A'
-			})
+			// If we got data, use it
+			if (data && !error && data.length > 0) {
+				console.log('[sharedItemsStorage] Successfully loaded', data.length, 'public compositions from Supabase')
+				
+				function transformSupabaseCompositions(items: any[]): SharedComposition[] {
+					return items.map(item => ({
+						id: item.id,
+						originalId: item.id,
+						name: item.name,
+						chords: item.chords as SharedComposition['chords'],
+						tempo: item.tempo,
+						timeSignature: item.time_signature as '3/4' | '4/4',
+						fluteType: 'innato',
+						tuning: '440',
+						sharedBy: item.user_id,
+						sharedByUsername: 'Anonymous',
+						sharedAt: new Date(item.created_at).getTime(),
+						isPublic: true,
+						favoriteCount: 0,
+						isReadOnly: true,
+						createdAt: new Date(item.created_at).getTime(),
+						updatedAt: new Date(item.updated_at).getTime(),
+						version: item.version || 1
+					}))
+				}
+				
+				const sharedCompositions = transformSupabaseCompositions(data)
+				
+				// Also merge with localStorage for backward compatibility
+				const localShared = loadLocalSharedCompositions()
+				const supabaseIds = new Set(sharedCompositions.map(c => c.id))
+				const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
+				
+				const result = [...sharedCompositions, ...localOnly]
+				console.log('[sharedItemsStorage] Returning', result.length, 'total shared compositions (', sharedCompositions.length, 'from Supabase,', localOnly.length, 'from localStorage)')
+				return result
+			}
 			
+			// If query failed or returned empty, log details
 			if (error) {
-				console.error('[sharedItemsStorage] Supabase error loading shared compositions:', error)
-				console.error('[sharedItemsStorage] Error code:', error.code)
-				console.error('[sharedItemsStorage] Error message:', error.message)
-				console.error('[sharedItemsStorage] Error details:', JSON.stringify(error, null, 2))
-				console.error('[sharedItemsStorage] Error hint:', error.hint || 'N/A')
-				
-				// Try alternative query without order
-				console.log('[sharedItemsStorage] Trying alternative query without order...')
-				const { data: altData, error: altError } = await supabase
-					.from('compositions')
-					.select('*')
-					.eq('is_public', true)
-				
-				if (altError) {
-					console.error('[sharedItemsStorage] Alternative query also failed:', altError)
-					return loadLocalSharedCompositions()
-				}
-				
-				if (altData) {
-					console.log('[sharedItemsStorage] Alternative query succeeded, got', altData.length, 'items')
-					return transformSupabaseCompositions(altData)
-				}
-				
-				return loadLocalSharedCompositions()
+				console.error('[sharedItemsStorage] Supabase query failed:', {
+					code: error.code,
+					message: error.message,
+					hint: error.hint,
+					details: error.details,
+					sessionStatus
+				})
+			} else if (!data || data.length === 0) {
+				console.warn('[sharedItemsStorage] Query succeeded but returned no public compositions')
+				console.warn('[sharedItemsStorage] This might mean:')
+				console.warn('[sharedItemsStorage]  1. No compositions are marked as is_public=true')
+				console.warn('[sharedItemsStorage]  2. RLS policy is blocking access')
+				console.warn('[sharedItemsStorage]  3. Database connection issue')
 			}
 			
-			if (!data || data.length === 0) {
-				console.warn('[sharedItemsStorage] Query succeeded but returned no data. Count:', count)
-				return loadLocalSharedCompositions()
-			}
+			// Fallback to localStorage
+			console.log('[sharedItemsStorage] Falling back to localStorage...')
+			return loadLocalSharedCompositions()
 			
-			console.log('[sharedItemsStorage] Successfully loaded', data.length, 'public compositions')
-			
-			function transformSupabaseCompositions(items: any[]): SharedComposition[] {
-				return items.map(item => ({
-					id: item.id,
-					originalId: item.id,
-					name: item.name,
-					chords: item.chords as SharedComposition['chords'],
-					tempo: item.tempo,
-					timeSignature: item.time_signature as '3/4' | '4/4',
-					fluteType: 'innato',
-					tuning: '440',
-					sharedBy: item.user_id,
-					sharedByUsername: 'Anonymous',
-					sharedAt: new Date(item.created_at).getTime(),
-					isPublic: true,
-					favoriteCount: 0,
-					isReadOnly: true,
-					createdAt: new Date(item.created_at).getTime(),
-					updatedAt: new Date(item.updated_at).getTime(),
-					version: item.version || 1
-				}))
-			}
-			
-			const sharedCompositions = transformSupabaseCompositions(data)
-			
-			// Also merge with localStorage for backward compatibility
-			const localShared = loadLocalSharedCompositions()
-			const supabaseIds = new Set(sharedCompositions.map(c => c.id))
-			const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
-			
-			const result = [...sharedCompositions, ...localOnly]
-			console.log('[sharedItemsStorage] Returning', result.length, 'total shared compositions (', sharedCompositions.length, 'from Supabase,', localOnly.length, 'from localStorage)')
-			return result
 		} catch (error) {
 			console.error('[sharedItemsStorage] Exception loading shared compositions from Supabase:', error)
 			console.error('[sharedItemsStorage] Error stack:', error instanceof Error ? error.stack : 'N/A')
@@ -345,58 +340,30 @@ export async function saveSharedComposition(
 			if (supabase && user) {
 				const { data: { session } } = await supabase.auth.getSession()
 				if (session?.user?.id) {
-					// Check if composition exists in Supabase
-					const { data: existing } = await supabase
-						.from('compositions')
-						.select('id, version')
-						.eq('id', composition.originalId)
-						.eq('user_id', session.user.id)
-						.single()
+					console.log('[sharedItemsStorage] Sharing composition:', composition.name, 'originalId:', composition.originalId)
 					
-					if (existing) {
-						// Update existing composition to be public
-						const { data: updated, error } = await supabase
+					// First, try to save the composition to Supabase if it doesn't exist
+					// Check if composition exists in Supabase
+					let compositionId = composition.originalId
+					let existing = null
+					
+					try {
+						const { data: checkExisting } = await supabase
 							.from('compositions')
-							.update({
-								name: composition.name,
-								chords: composition.chords,
-								tempo: composition.tempo,
-								time_signature: composition.timeSignature,
-								is_public: true,
-								version: isUpdate ? (existing.version || 1) + 1 : existing.version || 1
-							})
+							.select('id, version')
 							.eq('id', composition.originalId)
 							.eq('user_id', session.user.id)
-							.select()
 							.single()
 						
-						if (!error && updated) {
-							const saved: SharedComposition = {
-								id: updated.id,
-								originalId: updated.id,
-								name: updated.name,
-								chords: updated.chords as SharedComposition['chords'],
-								tempo: updated.tempo,
-								timeSignature: updated.time_signature as '3/4' | '4/4',
-								fluteType: composition.fluteType,
-								tuning: composition.tuning,
-								sharedBy: session.user.id,
-								sharedByUsername: getCurrentUsername(),
-								sharedAt: new Date(updated.created_at).getTime(),
-								isPublic: true,
-								favoriteCount: 0,
-								isReadOnly: true,
-								createdAt: new Date(updated.created_at).getTime(),
-								updatedAt: new Date(updated.updated_at).getTime(),
-								version: updated.version || 1
-							}
-							
-							// Also save to localStorage for backward compatibility
-							saveLocalSharedComposition(saved)
-							return saved
-						}
-					} else {
-						// Composition doesn't exist in Supabase yet - create it as public
+						existing = checkExisting
+					} catch {
+						// Composition doesn't exist in Supabase yet - that's OK, we'll create it
+						console.log('[sharedItemsStorage] Composition not found in Supabase, will create new one')
+					}
+					
+					if (!existing) {
+						// Composition doesn't exist in Supabase - save it first
+						console.log('[sharedItemsStorage] Saving composition to Supabase first...')
 						const { data: inserted, error: insertError } = await supabase
 							.from('compositions')
 							.insert({
@@ -405,13 +372,20 @@ export async function saveSharedComposition(
 								chords: composition.chords,
 								tempo: composition.tempo,
 								time_signature: composition.timeSignature,
-								is_public: true,
+								is_public: true, // Mark as public immediately
 								version: 1
 							})
 							.select()
 							.single()
 						
-						if (!insertError && inserted) {
+						if (insertError) {
+							console.error('[sharedItemsStorage] Error inserting composition:', insertError)
+							throw insertError
+						}
+						
+						if (inserted) {
+							compositionId = inserted.id
+							console.log('[sharedItemsStorage] Composition saved to Supabase with ID:', compositionId)
 							const saved: SharedComposition = {
 								id: inserted.id,
 								originalId: inserted.id,
@@ -432,7 +406,54 @@ export async function saveSharedComposition(
 								version: inserted.version || 1
 							}
 							
-							// Also save to localStorage for backward compatibility
+							saveLocalSharedComposition(saved)
+							return saved
+						}
+					} else {
+						// Composition exists - update it to be public
+						console.log('[sharedItemsStorage] Composition exists, updating to public...')
+						const { data: updated, error } = await supabase
+							.from('compositions')
+							.update({
+								name: composition.name,
+								chords: composition.chords,
+								tempo: composition.tempo,
+								time_signature: composition.timeSignature,
+								is_public: true,
+								version: isUpdate ? (existing.version || 1) + 1 : existing.version || 1
+							})
+							.eq('id', composition.originalId)
+							.eq('user_id', session.user.id)
+							.select()
+							.single()
+						
+						if (error) {
+							console.error('[sharedItemsStorage] Error updating composition:', error)
+							throw error
+						}
+						
+						if (updated) {
+							console.log('[sharedItemsStorage] Composition updated to public:', updated.id)
+							const saved: SharedComposition = {
+								id: updated.id,
+								originalId: updated.id,
+								name: updated.name,
+								chords: updated.chords as SharedComposition['chords'],
+								tempo: updated.tempo,
+								timeSignature: updated.time_signature as '3/4' | '4/4',
+								fluteType: composition.fluteType,
+								tuning: composition.tuning,
+								sharedBy: session.user.id,
+								sharedByUsername: getCurrentUsername(),
+								sharedAt: new Date(updated.created_at).getTime(),
+								isPublic: true,
+								favoriteCount: 0,
+								isReadOnly: true,
+								createdAt: new Date(updated.created_at).getTime(),
+								updatedAt: new Date(updated.updated_at).getTime(),
+								version: updated.version || 1
+							}
+							
 							saveLocalSharedComposition(saved)
 							return saved
 						}
