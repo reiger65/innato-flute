@@ -108,7 +108,21 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				break
 		}
 
-		return items.filter(item => item.sharedAt >= cutoffTime)
+		const filtered = items.filter(item => {
+			const itemTime = item.sharedAt || item.createdAt || 0
+			const passes = itemTime >= cutoffTime
+			if (!passes) {
+				console.log('[CommunityView] Item filtered out by date:', {
+					name: item.name,
+					sharedAt: new Date(item.sharedAt).toISOString(),
+					cutoffTime: new Date(cutoffTime).toISOString(),
+					dateFilter
+				})
+			}
+			return passes
+		})
+		
+		return filtered
 	}
 
 	// Sort items based on selected mode
@@ -326,7 +340,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 						⚠️ {loadingError}
 					</p>
 					<p style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)', color: 'rgba(0, 0, 0, 0.6)' }}>
-						Desktop shows {sharedItems.progressions.length + sharedItems.compositions.length} items. iPhone may have a connection issue. Try refreshing or check your network connection.
+						This might be a network issue on iPhone Safari. The app will retry automatically. Check your internet connection and try again.
 					</p>
 					<button 
 						className="btn-sm"
@@ -337,6 +351,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 								.then(ranked => {
 									setSharedItems(ranked)
 									const total = ranked.progressions.length + ranked.compositions.length
+									console.log('[CommunityView] Retry loaded:', total, 'items')
 									if (total === 0) {
 										setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
 									} else {
@@ -345,12 +360,13 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 									setIsLoading(false)
 								})
 								.catch(err => {
+									console.error('[CommunityView] Retry error:', err)
 									setLoadingError(`Error: ${err instanceof Error ? err.message : 'Failed to load'}`)
 									setIsLoading(false)
 								})
 						}}
 					>
-						Retry
+						Retry Now
 					</button>
 				</div>
 			)}

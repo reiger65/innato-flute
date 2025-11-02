@@ -123,8 +123,47 @@ export function loadSharedProgressions(): SharedProgression[] {
 }
 
 /**
- * Load all shared compositions from Supabase or localStorage
+ * Query with timeout and retry logic (Safari-compatible)
  */
+async function queryWithRetry<T>(
+	queryFn: () => Promise<{ data: T | null, error: any }>,
+	maxRetries: number = 3,
+	timeoutMs: number = 8000
+): Promise<{ data: T | null, error: any }> {
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			// Create timeout promise
+			const timeoutPromise = new Promise<{ data: null, error: any }>((resolve) => {
+				setTimeout(() => {
+					resolve({ data: null, error: { message: 'Query timeout', code: 'TIMEOUT' } })
+				}, timeoutMs)
+			})
+			
+			// Race between query and timeout
+			const result = await Promise.race([queryFn(), timeoutPromise])
+			
+			// If we got data or a non-timeout error, return
+			if (result.data || (result.error && result.error.code !== 'TIMEOUT')) {
+				return result
+			}
+			
+			// If timeout and we have retries left, wait and retry
+			if (attempt < maxRetries) {
+				const waitTime = Math.min(1000 * attempt, 3000) // Exponential backoff, max 3s
+				console.log(`[sharedItemsStorage] Query timeout, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})...`)
+				await new Promise(resolve => setTimeout(resolve, waitTime))
+			}
+		} catch (err) {
+			console.error(`[sharedItemsStorage] Query attempt ${attempt} failed:`, err)
+			if (attempt === maxRetries) {
+				return { data: null, error: err }
+			}
+		}
+	}
+	
+	return { data: null, error: { message: 'All retry attempts failed', code: 'RETRY_FAILED' } }
+}
+
 export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 	console.log('[sharedItemsStorage] loadSharedCompositions called')
 	console.log('[sharedItemsStorage] isSupabaseConfigured:', isSupabaseConfigured())
@@ -139,111 +178,116 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			
 			console.log('[sharedItemsStorage] Loading public compositions from Supabase...')
 			
-			// Check session status but don't require it for public items
-			let sessionStatus = 'unknown'
-			try {
-				const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-				sessionStatus = sessionError ? 'error' : (sessionData?.session ? 'authenticated' : 'anonymous')
-				console.log('[sharedItemsStorage] Session status:', sessionStatus)
-			} catch (sessionErr) {
-				console.warn('[sharedItemsStorage] Could not check session (might be anonymous):', sessionErr)
-				sessionStatus = 'anonymous'
+			// Transform function (reusable)
+			function transformSupabaseCompositions(items: any[]): SharedComposition[] {
+				return items.map(item => ({
+					id: item.id,
+					originalId: item.id,
+					name: item.name,
+					chords: item.chords as SharedComposition['chords'],
+					tempo: item.tempo,
+					timeSignature: item.time_signature as '3/4' | '4/4',
+					fluteType: 'innato',
+					tuning: '440',
+					sharedBy: item.user_id,
+					sharedByUsername: 'Anonymous',
+					sharedAt: new Date(item.created_at).getTime(),
+					isPublic: true,
+					favoriteCount: 0,
+					isReadOnly: true,
+					createdAt: new Date(item.created_at).getTime(),
+					updatedAt: new Date(item.updated_at).getTime(),
+					version: item.version || 1
+				}))
 			}
 			
-			// Try querying public compositions - should work even without authentication
-			// Strategy 1: Simplest query first (most compatible)
-			let data: any = null
-			let error: any = null
-			
-			console.log('[sharedItemsStorage] Attempting query (strategy 1: simplest)...')
-			try {
-				const result = await supabase
-					.from('compositions')
-					.select('*')
-					.eq('is_public', true)
-				
-				data = result.data
-				error = result.error
-				
-				if (error) {
-					console.error('[sharedItemsStorage] Strategy 1 error:', error.code, error.message, error.hint)
-				} else if (data) {
-					console.log('[sharedItemsStorage] Strategy 1 succeeded! Loaded', data.length, 'compositions')
-					// Sort manually by updated_at (newest first)
-					data.sort((a: any, b: any) => {
-						const dateA = new Date(a.updated_at || a.created_at).getTime()
-						const dateB = new Date(b.updated_at || b.created_at).getTime()
-						return dateB - dateA
-					})
-				}
-			} catch (queryError) {
-				console.error('[sharedItemsStorage] Strategy 1 exception:', queryError)
-				error = queryError
-			}
+			// Strategy 1: Query with retry and timeout (Safari-compatible)
+			console.log('[sharedItemsStorage] Attempting query with retry logic...')
+			const result = await queryWithRetry(
+				async () => {
+					try {
+						const queryResult = await supabase
+							.from('compositions')
+							.select('*')
+							.eq('is_public', true)
+						
+						return {
+							data: queryResult.data || [],
+							error: queryResult.error
+						}
+					} catch (err) {
+						return {
+							data: null,
+							error: err
+						}
+					}
+				},
+				3, // 3 retries
+				8000 // 8 second timeout
+			)
 			
 			// If we got data, use it
-			if (data && !error && data.length > 0) {
-				console.log('[sharedItemsStorage] Successfully loaded', data.length, 'public compositions from Supabase')
+			if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+				console.log('[sharedItemsStorage] ✅ Successfully loaded', result.data.length, 'public compositions from Supabase')
 				
-				function transformSupabaseCompositions(items: any[]): SharedComposition[] {
-					return items.map(item => ({
-						id: item.id,
-						originalId: item.id,
-						name: item.name,
-						chords: item.chords as SharedComposition['chords'],
-						tempo: item.tempo,
-						timeSignature: item.time_signature as '3/4' | '4/4',
-						fluteType: 'innato',
-						tuning: '440',
-						sharedBy: item.user_id,
-						sharedByUsername: 'Anonymous',
-						sharedAt: new Date(item.created_at).getTime(),
-						isPublic: true,
-						favoriteCount: 0,
-						isReadOnly: true,
-						createdAt: new Date(item.created_at).getTime(),
-						updatedAt: new Date(item.updated_at).getTime(),
-						version: item.version || 1
-					}))
-				}
+				// Sort manually by updated_at (newest first)
+				const sortedData = [...result.data].sort((a: any, b: any) => {
+					const dateA = new Date(a.updated_at || a.created_at).getTime()
+					const dateB = new Date(b.updated_at || b.created_at).getTime()
+					return dateB - dateA
+				})
 				
-				const sharedCompositions = transformSupabaseCompositions(data)
+				const sharedCompositions = transformSupabaseCompositions(sortedData)
 				
 				// Also merge with localStorage for backward compatibility
 				const localShared = loadLocalSharedCompositions()
 				const supabaseIds = new Set(sharedCompositions.map(c => c.id))
 				const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
 				
-				const result = [...sharedCompositions, ...localOnly]
-				console.log('[sharedItemsStorage] Returning', result.length, 'total shared compositions (', sharedCompositions.length, 'from Supabase,', localOnly.length, 'from localStorage)')
-				return result
+				const mergedCompositions = [...sharedCompositions, ...localOnly]
+				console.log('[sharedItemsStorage] Returning', mergedCompositions.length, 'total shared compositions (', sharedCompositions.length, 'from Supabase,', localOnly.length, 'from localStorage)')
+				return mergedCompositions
 			}
 			
-			// If query failed or returned empty, log details
-			if (error) {
-				console.error('[sharedItemsStorage] Supabase query failed:', {
-					code: error.code,
-					message: error.message,
-					hint: error.hint,
-					details: error.details,
-					sessionStatus
-				})
-			} else if (!data || data.length === 0) {
-				console.warn('[sharedItemsStorage] Query succeeded but returned no public compositions')
+			// If query returned empty array (not an error, just no data)
+			if (result.data && Array.isArray(result.data) && result.data.length === 0) {
+				console.warn('[sharedItemsStorage] Query succeeded but returned 0 public compositions')
 				console.warn('[sharedItemsStorage] This might mean:')
 				console.warn('[sharedItemsStorage]  1. No compositions are marked as is_public=true')
-				console.warn('[sharedItemsStorage]  2. RLS policy is blocking access')
-				console.warn('[sharedItemsStorage]  3. Database connection issue')
+				console.warn('[sharedItemsStorage]  2. RLS policy might be blocking access')
+				
+				// Still try localStorage as fallback
+				const localShared = loadLocalSharedCompositions()
+				if (localShared.length > 0) {
+					console.log('[sharedItemsStorage] Found', localShared.length, 'compositions in localStorage fallback')
+					return localShared
+				}
+				
+				return []
+			}
+			
+			// If error occurred, log details
+			if (result.error) {
+				console.error('[sharedItemsStorage] ❌ Supabase query failed:', {
+					code: result.error.code,
+					message: result.error.message,
+					hint: result.error.hint,
+					details: result.error.details
+				})
 			}
 			
 			// Fallback to localStorage
 			console.log('[sharedItemsStorage] Falling back to localStorage...')
-			return loadLocalSharedCompositions()
+			const localShared = loadLocalSharedCompositions()
+			console.log('[sharedItemsStorage] Loaded', localShared.length, 'compositions from localStorage fallback')
+			return localShared
 			
 		} catch (error) {
 			console.error('[sharedItemsStorage] Exception loading shared compositions from Supabase:', error)
 			console.error('[sharedItemsStorage] Error stack:', error instanceof Error ? error.stack : 'N/A')
-			return loadLocalSharedCompositions()
+			const localShared = loadLocalSharedCompositions()
+			console.log('[sharedItemsStorage] Loaded', localShared.length, 'compositions from localStorage after exception')
+			return localShared
 		}
 	}
 	
