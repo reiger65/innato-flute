@@ -162,11 +162,11 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 					background: 'var(--color-white)',
 					marginTop: 'var(--space-4)'
 				}}>
-					<h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-2)' }}>
-						Free Account Required
+					<h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-3)' }}>
+						Login or Create Free Account
 					</h3>
 					<p style={{ fontSize: 'var(--font-size-base)', color: 'rgba(0, 0, 0, 0.7)', marginBottom: 'var(--space-4)', lineHeight: '1.5' }}>
-						Create a free account to unlock the Community section. Share your progressions and compositions, discover what others have created, and build your musical library together with the INNATO community.
+						To access the Community section, you need to log in or create a free account. Join the INNATO community to share your progressions and compositions, and discover what others have created.
 					</p>
 					<div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'center', flexWrap: 'wrap' }}>
 						<button
@@ -176,9 +176,9 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 									onShowLogin()
 								}
 							}}
-							style={{ minWidth: '140px' }}
+							style={{ minWidth: '160px' }}
 						>
-							Create Free Account
+							Login / Sign Up
 						</button>
 					</div>
 				</div>
