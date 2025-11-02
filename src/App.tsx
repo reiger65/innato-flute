@@ -126,6 +126,22 @@ export default function App() {
 
 	// Initialize user state on mount and listen for changes
 	useEffect(() => {
+		// Check Supabase configuration on mount
+		const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+		const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+		
+		console.log('🚀 App mounting - Environment check:')
+		console.log('   VITE_SUPABASE_URL:', supabaseUrl || '❌ MISSING')
+		console.log('   VITE_SUPABASE_ANON_KEY:', supabaseKey ? '✅ SET' : '❌ MISSING')
+		
+		if (!supabaseUrl || !supabaseKey) {
+			console.error('⚠️⚠️⚠️ SUPABASE NOT CONFIGURED IN PRODUCTION ⚠️⚠️⚠️')
+			console.error('   The app will use localStorage auth, which only works locally!')
+			console.error('   Add environment variables in Vercel: Settings → Environment Variables')
+		} else {
+			console.log('✅ Supabase environment variables found')
+		}
+		
 		const user = getCurrentUser()
 		setCurrentUser(user)
 		
@@ -134,7 +150,9 @@ export default function App() {
 		let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null
 		
 		if (supabase) {
+			console.log('✅ Supabase client initialized, setting up auth listener')
 			const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
+				console.log('🔔 Auth state changed:', _event, session?.user?.email || 'no user')
 				if (session?.user) {
 					const user: User = {
 						id: session.user.id,
@@ -149,6 +167,8 @@ export default function App() {
 				}
 			})
 			authListener = { data: { subscription } }
+		} else {
+			console.warn('⚠️ Supabase client is null, using localStorage only')
 		}
 		
 		// Listen for storage changes (login/logout from other tabs)

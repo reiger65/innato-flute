@@ -20,7 +20,20 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 
 	// Check for existing session on mount
 	useEffect(() => {
+		// Check Supabase configuration
+		const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+		const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+		
+		console.log('🔍 LoginPanel mounted - Environment check:')
+		console.log('   VITE_SUPABASE_URL:', supabaseUrl || '❌ MISSING')
+		console.log('   VITE_SUPABASE_ANON_KEY:', supabaseKey ? '✅ SET' : '❌ MISSING')
+		
+		if (!supabaseUrl || !supabaseKey) {
+			console.error('⚠️ LoginPanel: Supabase not configured! Using localStorage only.')
+		}
+		
 		const user = getCurrentUser()
+		console.log('   Current user:', user ? `${user.email} (${user.id})` : 'none')
 		setCurrentUser(user)
 		onAuthChange(user)
 	}, [onAuthChange])
