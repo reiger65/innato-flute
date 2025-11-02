@@ -45,10 +45,18 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				
 				// Log for debugging (visible in UI too)
 				const total = ranked.progressions.length + ranked.compositions.length
+				console.log('[CommunityView] Loaded items:', {
+					progressions: ranked.progressions.length,
+					compositions: ranked.compositions.length,
+					total
+				})
+				
+				// Only show error if NO items were loaded at all
+				// If items exist but are filtered out, don't show error
 				if (total === 0) {
 					setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
 				} else {
-					setLoadingError(null) // Clear error if items found
+					setLoadingError(null) // Clear error if items found (even if filtered out)
 				}
 			} catch (error) {
 				console.error('Error loading shared items:', error)
@@ -163,6 +171,17 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 	}
 
 	const sortedItems = getSortedItems()
+	
+	// Debug: Log what's happening with filtering
+	console.log('[CommunityView] Filtering state:', {
+		viewMode,
+		dateFilter,
+		sortMode,
+		totalItems: sharedItems.progressions.length + sharedItems.compositions.length,
+		sortedItemsCount: sortedItems.length,
+		progressions: sharedItems.progressions.length,
+		compositions: sharedItems.compositions.length
+	})
 
 	// If not authenticated, show introduction and login prompt
 	if (!isAuthenticated) {
@@ -339,10 +358,32 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 			{/* Items Grid */}
 			{!isLoading && sortedItems.length === 0 && !loadingError && (
 				<div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'rgba(0, 0, 0, 0.6)' }}>
-					<p>No shared items yet. Be the first to share something!</p>
-					<p style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
-						Mark progressions as favorite or share compositions to see them here.
-					</p>
+					{sharedItems.progressions.length + sharedItems.compositions.length > 0 ? (
+						<>
+							<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
+								Found {sharedItems.progressions.length + sharedItems.compositions.length} item(s), but they don't match your filters.
+							</p>
+							<p style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)' }}>
+								Current filters: View = "{viewMode}", Date = "{dateFilter}"
+							</p>
+							<button 
+								className="btn-sm"
+								onClick={() => {
+									setViewMode('all')
+									setDateFilter('all')
+								}}
+							>
+								Reset Filters
+							</button>
+						</>
+					) : (
+						<>
+							<p>No shared items yet. Be the first to share something!</p>
+							<p style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
+								Mark progressions as favorite or share compositions to see them here.
+							</p>
+						</>
+					)}
 				</div>
 			)}
 			
