@@ -855,7 +855,10 @@ export default function App() {
 					<div className="toolbar">
 						<div className="brand">
 							<img src="/logo.jpg" alt="Stonewhistle" className="logo" />
-							<div>Stonewhistle Score Composer</div>
+							<div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
+								<div>Stonewhistle</div>
+								<div>INNATO Explorations</div>
+							</div>
 						</div>
 						<div className="right">
 							<div className="settings-group">
