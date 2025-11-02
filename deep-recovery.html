@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Deep Recovery - 16 Compositions</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        .critical { background: #f8d7da; border: 2px solid #dc3545; padding: 15px; margin: 20px 0; font-weight: bold; }
+        .warning { background: #fff3cd; border: 2px solid #ffc107; padding: 15px; margin: 20px 0; }
+        .found { color: green; font-weight: bold; background: #d4edda; padding: 10px; margin: 5px 0; }
+        pre { background: #f5f5f5; padding: 15px; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>DEEP RECOVERY - 16 Compositions</h1>
+    
+    <div class="critical">
+        <strong>URGENT:</strong> Searching for 16 lost compositions. Checking ALL possible storage locations.
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        (function() {
+            var results = document.getElementById('results');
+            var html = '<h2>Searching all localStorage...</h2>';
+            var foundData = null;
+            var foundKey = null;
+            
+            // 1. Check main composition key
+            var mainKey = 'innato-compositions';
+            var mainData = localStorage.getItem(mainKey);
+            if (mainData) {
+                try {
+                    var parsed = JSON.parse(mainData);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        foundData = parsed;
+                        foundKey = mainKey;
+                        html += '<div class="found">FOUND ' + parsed.length + ' compositions in "' + mainKey + '"!</div>';
+                    }
+                } catch(e) {}
+            }
+            
+            // 2. Check ALL keys for composition-like data
+            html += '<h3>Scanning ALL localStorage keys for composition data...</h3><ul>';
+            var allKeys = Object.keys(localStorage);
+            var potentialData = [];
+            
+            for (var i = 0; i < allKeys.length; i++) {
+                var key = allKeys[i];
+                var value = localStorage.getItem(key);
+                
+                if (value && value.length > 50) { // Only check substantial data
+                    try {
+                        var parsed = JSON.parse(value);
+                        if (Array.isArray(parsed)) {
+                            // Check if it looks like compositions
+                            if (parsed.length > 0 && parsed[0]) {
+                                var item = parsed[0];
+                                if ((item.name || item.title) && (item.chords || item.chordIds || item.notes)) {
+                                    html += '<li class="found"><strong>' + key + '</strong>: Array with ' + parsed.length + ' items that look like compositions!</li>';
+                                    potentialData.push({key: key, data: parsed});
+                                }
+                            }
+                        } else if (typeof parsed === 'object' && parsed !== null) {
+                            // Check if object has composition-like structure
+                            if ((parsed.chords || parsed.chordIds || parsed.notes) && (parsed.name || parsed.title)) {
+                                html += '<li class="found"><strong>' + key + '</strong>: Object that looks like a composition!</li>';
+                                potentialData.push({key: key, data: [parsed]});
+                            }
+                        }
+                    } catch(e) {
+                        // Not JSON, skip
+                    }
+                }
+            }
+            
+            // 3. Check lessons for embedded composition data
+            html += '<h3>Checking lessons for composition references...</h3>';
+            var lessonsData = localStorage.getItem('innato-lessons');
+            if (lessonsData) {
+                try {
+                    var lessons = JSON.parse(lessonsData);
+                    var withCompositionIds = [];
+                    var compositionIds = [];
+                    for (var j = 0; j < lessons.length; j++) {
+                        if (lessons[j].compositionId) {
+                            withCompositionIds.push(lessons[j]);
+                            compositionIds.push(lessons[j].compositionId);
+                        }
+                    }
+                    if (withCompositionIds.length > 0) {
+                        html += '<p class="found">Found ' + withCompositionIds.length + ' lessons with compositionId references:</p>';
+                        html += '<pre>' + JSON.stringify(withCompositionIds, null, 2) + '</pre>';
+                        html += '<p><strong>These composition IDs are referenced but may be missing from storage:</strong></p>';
+                        html += '<pre>' + JSON.stringify(compositionIds, null, 2) + '</pre>';
+                    }
+                } catch(e) {
+                    html += '<p>Error parsing lessons: ' + e.message + '</p>';
+                }
+            }
+            
+            html += '</ul>';
+            
+            // 4. Show found data
+            if (foundData) {
+                html += '<h2>RECOVERED DATA:</h2>';
+                html += '<div class="found">';
+                html += '<p><strong>Found in key: ' + foundKey + '</strong></p>';
+                html += '<p><strong>Number of compositions: ' + foundData.length + '</strong></p>';
+                html += '<h3>Composition Names:</h3><ul>';
+                for (var k = 0; k < foundData.length; k++) {
+                    html += '<li><strong>' + (foundData[k].name || 'Unnamed') + '</strong> (ID: ' + foundData[k].id + ', Chords: ' + (foundData[k].chords ? foundData[k].chords.length : 0) + ')</li>';
+                }
+                html += '</ul>';
+                html += '<button onclick="exportFound()">EXPORT ALL COMPOSITIONS</button>';
+                html += '<button onclick="restoreFound()">RESTORE TO LOCALSTORAGE</button>';
+                html += '</div>';
+                html += '<h3>Full JSON Data:</h3><pre id="jsonData">' + JSON.stringify(foundData, null, 2) + '</pre>';
+                
+                window.foundCompositions = foundData;
+                window.foundCompositionsKey = foundKey;
+            } else if (potentialData.length > 0) {
+                html += '<h2>POTENTIAL COMPOSITIONS FOUND:</h2>';
+                for (var p = 0; p < potentialData.length; p++) {
+                    html += '<div class="warning">';
+                    html += '<h3>Key: ' + potentialData[p].key + '</h3>';
+                    html += '<p>Items: ' + potentialData[p].data.length + '</p>';
+                    html += '<pre>' + JSON.stringify(potentialData[p].data, null, 2) + '</pre>';
+                    html += '</div>';
+                }
+            } else {
+                html += '<div class="critical">';
+                html += '<h2>NO COMPOSITIONS FOUND</h2>';
+                html += '<p>Checked all localStorage keys. No composition data found.</p>';
+                html += '<p><strong>All localStorage keys:</strong></p><ul>';
+                for (var a = 0; a < allKeys.length; a++) {
+                    html += '<li>' + allKeys[a] + '</li>';
+                }
+                html += '</ul>';
+                html += '</div>';
+            }
+            
+            results.innerHTML = html;
+            
+            window.exportFound = function() {
+                if (!window.foundCompositions) {
+                    alert('No data to export');
+                    return;
+                }
+                var json = JSON.stringify(window.foundCompositions, null, 2);
+                var blob = new Blob([json], { type: 'application/json' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'RECOVERED-compositions-' + Date.now() + '.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+            
+            window.restoreFound = function() {
+                if (!window.foundCompositions) {
+                    alert('No data to restore');
+                    return;
+                }
+                if (confirm('Restore ' + window.foundCompositions.length + ' compositions to localStorage key "innato-compositions"?')) {
+                    localStorage.setItem('innato-compositions', JSON.stringify(window.foundCompositions));
+                    alert('RESTORED! Refresh the app immediately to see your compositions.');
+                }
+            };
+        })();
+    </script>
+</body>
+</html>

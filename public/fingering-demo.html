@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fingering Diagram - Isolated</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .demo-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+        }
+        .chord-card {
+            width: 65px;
+            height: 65px;
+            border: 2px solid black;
+            border-radius: 8px;
+            background: white;
+            color: black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .chord-card:hover {
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+        }
+        .chord-card:active,
+        .chord-card.active {
+            transform: scale(0.98);
+            box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.25);
+            background: rgba(0, 0, 0, 0.02);
+        }
+        .chord-card--fluid {
+            width: auto;
+            height: auto;
+            padding: 12px;
+        }
+        .fingering {
+            display: block;
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .fingering circle {
+            stroke: black;
+            stroke-width: 2px;
+        }
+        .fingering circle[data-open="true"] {
+            fill: white;
+        }
+        .fingering circle[data-open="false"] {
+            fill: black;
+        }
+        .fg-label {
+            fill: black;
+            font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        .fingering text {
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        .fg-root {
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .fg-val {
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .fg-sub {
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .btn-nav {
+            padding: 8px 16px;
+            border: 2px solid black;
+            background: white;
+            color: black;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-nav:hover:not(:disabled) {
+            background: black;
+            color: white;
+        }
+        .btn-nav:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .chord-browser {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .chord-info {
+            min-width: 120px;
+            text-align: center;
+            font-weight: 700;
+        }
+        .flute-selector {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .flute-selector label {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .flute-selector select {
+            padding: 6px 12px;
+            border: 2px solid black;
+            background: white;
+            color: black;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+    </style>
+    <script>
+        /**
+         * Fingering Diagram - Standalone Demo
+         * 
+         * This demo replicates the exact geometry and positioning of the React component.
+         * All constants match the optimized component version.
+         */
+        
+        // Geometry constants (match ChordCard.tsx)
+        const CENTER_X = 60;
+        const CENTER_Y = 60;
+        const DEFAULT_RING_RADIUS = 34.5;
+        const DEFAULT_RING_ROTATION_DEG = 90;
+        const DEFAULT_HOLE_RADIUS = 9;
+        const DEFAULT_CENTER_RADIUS = 15;
+        const DEFAULT_ARM_THICKNESS = 3;
+        const DEFAULT_ARM_LENGTH = 40;
+        const ARM_ANGLES = [-90, 30, 150];
+        const LABEL_DISTANCE_FROM_ARM_END = 8;
+        const LABEL_HORIZONTAL_SHIFT = 0; // No shift needed - textAnchor="middle" handles centering
+        const LABEL_VERTICAL_SHIFT = 5;
+        const LABEL_TOP_VERTICAL_SHIFT = -3; // Move top label up a bit
+        const CENTER_TEXT_HORIZONTAL_OFFSET = 0; // Perfect center - no offset needed
+        const CENTER_TEXT_VERTICAL_OFFSET = 0.1; // Small vertical offset to center text better
+        
+        // Utility
+        const toRad = (deg) => (deg * Math.PI) / 180;
+        
+        // Generate hole positions in perfect circle
+        function generateCircleHoles(openStates, ringRadius = DEFAULT_RING_RADIUS, rotationDeg = DEFAULT_RING_ROTATION_DEG) {
+            const numHoles = 6;
+            const startAngleDeg = -90 + rotationDeg;
+            const holes = [];
+            
+            for (let i = 0; i < numHoles; i++) {
+                const angleRad = ((startAngleDeg + (360 / numHoles) * i) * Math.PI) / 180;
+                holes.push({
+                    cx: CENTER_X + ringRadius * Math.cos(angleRad),
+                    cy: CENTER_Y + ringRadius * Math.sin(angleRad),
+                    open: !!openStates[i]
+                });
+            }
+            return holes;
+        }
+        
+        // Render 3 arms as narrow ellipses
+        function renderArms(cx, cy, ringR, holeR, centerR, rotationDeg, thickness = DEFAULT_ARM_THICKNESS, armLength = DEFAULT_ARM_LENGTH) {
+            const innerR = 0;
+            const outerR = innerR + armLength;
+            let armsHTML = '';
+            
+            ARM_ANGLES.forEach(angleDeg => {
+                const angleRad = toRad(angleDeg);
+                const x1 = cx + innerR * Math.cos(angleRad);
+                const y1 = cy + innerR * Math.sin(angleRad);
+                const x2 = cx + outerR * Math.cos(angleRad);
+                const y2 = cy + outerR * Math.sin(angleRad);
+                
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+                const lineLength = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+                
+                const ellipseRx = thickness * 0.75;
+                const ellipseRy = lineLength / 2;
+                
+                armsHTML += `<ellipse cx="${midX}" cy="${midY}" rx="${ellipseRx}" ry="${ellipseRy}" fill="black" transform="rotate(${angleDeg + 90} ${midX} ${midY})" />`;
+            });
+            
+            return armsHTML;
+        }
+        
+        // Render note labels at end of arms
+        function renderLabels(cx, cy, armLength, labelTop, labelLeft, labelRight) {
+            const outerR = armLength;
+            let labelsHTML = '';
+            
+            function renderSingleLabel(armAngleDeg, label, className, isTop = false) {
+                if (!label) return '';
+                const angleRad = toRad(armAngleDeg);
+                const textRadius = outerR + LABEL_DISTANCE_FROM_ARM_END;
+                // Calculate position at end of arm
+                const x = cx + textRadius * Math.cos(angleRad);
+                // Apply extra vertical shift for top label
+                const verticalShift = isTop ? (LABEL_VERTICAL_SHIFT + LABEL_TOP_VERTICAL_SHIFT) : LABEL_VERTICAL_SHIFT;
+                const y = cy + textRadius * Math.sin(angleRad) + verticalShift;
+                // textAnchor="middle" centers horizontally, dominantBaseline="middle" centers vertically
+                return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" class="fg-label ${className}">${label}</text>`;
+            }
+            
+            labelsHTML += renderSingleLabel(-90, labelTop, 'fg-root', true);
+            labelsHTML += renderSingleLabel(150, labelLeft, 'fg-sub', false);
+            labelsHTML += renderSingleLabel(30, labelRight, 'fg-sub', false);
+            
+            return labelsHTML;
+        }
+        
+        // Chord mappings (all 64 chords)
+        const chordToFingering = {
+            1: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: false, frontLeft: false, frontRight: false },
+            2: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: false, frontLeft: false, frontRight: true },
+            3: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: false, frontLeft: true, frontRight: false },
+            4: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: false, frontLeft: true, frontRight: true },
+            5: { leftUpper: false, leftLower: false, rightUpper: true, rightLower: false, frontLeft: false, frontRight: false },
+            6: { leftUpper: false, leftLower: false, rightUpper: true, rightLower: false, frontLeft: false, frontRight: true },
+            7: { leftUpper: false, leftLower: false, rightUpper: true, rightLower: false, frontLeft: true, frontRight: false },
+            8: { leftUpper: false, leftLower: false, rightUpper: true, rightLower: false, frontLeft: true, frontRight: true },
+            9: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: true, frontLeft: false, frontRight: false },
+            10: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: true, frontLeft: false, frontRight: true },
+            11: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: true, frontLeft: true, frontRight: false },
+            12: { leftUpper: false, leftLower: false, rightUpper: false, rightLower: true, frontLeft: true, frontRight: true },
+            13: { leftUpper: false, leftLower: false, rightUpper: true, rightLower: true, frontLeft: false, frontRight: false },
+            14: { leftUpper: false, leftLower: false, rightUpper: true, rightLower: true, frontLeft: false, frontRight: true },
+            15: { leftUpper: false, leftLower: false, rightUpper: true, rightLower: true, frontLeft: true, frontRight: false },
+            16: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: true, frontLeft: true, frontRight: true },
+            17: { leftUpper: true, leftLower: false, rightUpper: false, rightLower: true, frontLeft: false, frontRight: false },
+            18: { leftUpper: true, leftLower: false, rightUpper: false, rightLower: false, frontLeft: false, frontRight: true },
+            19: { leftUpper: true, leftLower: false, rightUpper: false, rightLower: false, frontLeft: true, frontRight: false },
+            20: { leftUpper: true, leftLower: false, rightUpper: false, rightLower: false, frontLeft: true, frontRight: true },
+            21: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: false, frontLeft: false, frontRight: false },
+            22: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: false, frontLeft: false, frontRight: true },
+            23: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: false, frontLeft: true, frontRight: false },
+            24: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: false, frontLeft: true, frontRight: false },
+            25: { leftUpper: true, leftLower: false, rightUpper: false, rightLower: true, frontLeft: false, frontRight: false },
+            26: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: false, frontLeft: false, frontRight: true },
+            27: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: false, frontLeft: true, frontRight: false },
+            28: { leftUpper: true, leftLower: false, rightUpper: false, rightLower: true, frontLeft: true, frontRight: true },
+            29: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: true, frontLeft: false, frontRight: false },
+            30: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: true, frontLeft: false, frontRight: true },
+            31: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: true, frontLeft: true, frontRight: false },
+            32: { leftUpper: true, leftLower: false, rightUpper: true, rightLower: true, frontLeft: true, frontRight: true },
+            33: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: false, frontLeft: false, frontRight: false },
+            34: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: false, frontLeft: false, frontRight: true },
+            35: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: false, frontLeft: true, frontRight: false },
+            36: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: false, frontLeft: true, frontRight: true },
+            37: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: false, frontLeft: false, frontRight: false },
+            38: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: false, frontLeft: false, frontRight: true },
+            39: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: false, frontLeft: true, frontRight: false },
+            40: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: false, frontLeft: true, frontRight: true },
+            41: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: true, frontLeft: false, frontRight: false },
+            42: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: true, frontLeft: false, frontRight: true },
+            43: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: true, frontLeft: true, frontRight: false },
+            44: { leftUpper: false, leftLower: true, rightUpper: false, rightLower: true, frontLeft: true, frontRight: true },
+            45: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: true, frontLeft: false, frontRight: false },
+            46: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: true, frontLeft: false, frontRight: true },
+            47: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: true, frontLeft: true, frontRight: false },
+            48: { leftUpper: false, leftLower: true, rightUpper: true, rightLower: true, frontLeft: true, frontRight: true },
+            49: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: false, frontLeft: false, frontRight: false },
+            50: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: false, frontLeft: false, frontRight: true },
+            51: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: false, frontLeft: true, frontRight: false },
+            52: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: false, frontLeft: true, frontRight: true },
+            53: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: false, frontLeft: false, frontRight: false },
+            54: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: false, frontLeft: false, frontRight: true },
+            55: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: false, frontLeft: true, frontRight: false },
+            56: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: false, frontLeft: true, frontRight: true },
+            57: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: true, frontLeft: false, frontRight: false },
+            58: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: true, frontLeft: false, frontRight: true },
+            59: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: true, frontLeft: true, frontRight: false },
+            60: { leftUpper: true, leftLower: true, rightUpper: false, rightLower: true, frontLeft: true, frontRight: true },
+            61: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: true, frontLeft: false, frontRight: false },
+            62: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: true, frontLeft: false, frontRight: true },
+            63: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: true, frontLeft: true, frontRight: false },
+            64: { leftUpper: true, leftLower: true, rightUpper: true, rightLower: true, frontLeft: true, frontRight: true }
+        };
+        
+        // All available flute types and their notes
+        const fluteNotes = {
+            "Em4": {
+                left: ["B3", "E4", "D4", "F#4"],
+                right: ["E4", "A4", "G4", "B4"],
+                front: ["B4", "D5", "E5", "F#5"]
+            },
+            "D#m4": {
+                left: ["Bb3", "Eb4", "Db4", "F4"],
+                right: ["Eb4", "Ab4", "Gb4", "Bb4"],
+                front: ["Bb4", "Db5", "Eb5", "F5"]
+            },
+            "Dm4": {
+                left: ["A3", "D4", "C4", "E4"],
+                right: ["D4", "G4", "F4", "A4"],
+                front: ["A4", "C5", "D5", "E5"]
+            },
+            "C#m4": {
+                left: ["G#3", "C#4", "B3", "D#4"],
+                right: ["C#4", "F#4", "E4", "G#4"],
+                front: ["G#4", "B4", "C#5", "D#5"]
+            },
+            "Cm4": {
+                left: ["G3", "Bb3", "C4", "D4"],
+                right: ["C4", "Eb4", "F4", "G4"],
+                front: ["G4", "Bb4", "C5", "D5"]
+            },
+            "Bm3": {
+                left: ["F#3", "B3", "A3", "C#4"],
+                right: ["B3", "E4", "D4", "F#4"],
+                front: ["F#4", "A4", "B4", "C#5"]
+            },
+            "Bbm3": {
+                left: ["F3", "Bb3", "Ab3", "C4"],
+                right: ["Bb3", "Eb4", "Db4", "F4"],
+                front: ["F4", "Ab4", "Bb4", "C5"]
+            },
+            "Am3": {
+                left: ["E3", "A3", "G3", "B3"],
+                right: ["A3", "D4", "C4", "E4"],
+                front: ["E4", "G4", "A4", "B4"]
+            },
+            "G#m3": {
+                left: ["D#3", "G#3", "F#3", "A#3"],
+                right: ["G#3", "C#4", "B3", "D#4"],
+                front: ["D#4", "F#4", "G#4", "A#4"]
+            },
+            "Gm3": {
+                left: ["G3", "C4", "Bb3", "D4"],
+                right: ["C4", "F4", "Eb4", "G4"],
+                front: ["G4", "Bb4", "C5", "D5"]
+            },
+            "F#m3": {
+                left: ["C#3", "F#3", "E3", "G#3"],
+                right: ["F#3", "B3", "A3", "C#4"],
+                front: ["C#4", "E4", "F#4", "G#4"]
+            },
+            "Fm3": {
+                left: ["C3", "F3", "Eb3", "G3"],
+                right: ["F3", "Bb3", "Ab3", "C4"],
+                front: ["C4", "Eb4", "F4", "G4"]
+            },
+            "Em3": {
+                left: ["B2", "E3", "D3", "F#3"],
+                right: ["E3", "A3", "G3", "B3"],
+                front: ["B3", "D4", "E4", "F#4"]
+            }
+        };
+        
+        // Current flute type
+        let currentFluteType = "Cm4";
+        
+        // Current notes for the displayed chord
+        let currentNotes = { left: "", right: "", front: "" };
+        
+        // Active state for click effect
+        let isDiagramActive = false;
+        
+        // Audio Player Implementation
+        class SimpleAudioPlayer {
+            constructor() {
+                this.audioContext = null;
+                this.oscillators = [];
+                this.gainNode = null;
+                this.initialized = false;
+            }
+            
+            async initAudio() {
+                if (this.initialized && this.audioContext) {
+                    return;
+                }
+                
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.gainNode = this.audioContext.createGain();
+                    this.gainNode.connect(this.audioContext.destination);
+                    this.gainNode.gain.value = 0.3;
+                    this.initialized = true;
+                    console.log("Audio initialized successfully");
+                } catch (error) {
+                    console.error("Error initializing audio:", error);
+                    throw error;
+                }
+            }
+            
+            stopAll() {
+                if (this.oscillators.length > 0) {
+                    this.oscillators.forEach(osc => {
+                        try {
+                            osc.stop();
+                        } catch (e) {
+                            // Already stopped
+                        }
+                    });
+                    this.oscillators = [];
+                }
+            }
+            
+            getNoteFrequency(note, tuning) {
+                const tuningFrequencies = {
+                    "440": 440,
+                    "432": 432,
+                    "256": 256 * Math.pow(2, 0.75)
+                };
+                
+                const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+                
+                const noteName = note.slice(0, -1);
+                const octave = parseInt(note.slice(-1));
+                
+                let noteIndex = notes.indexOf(noteName);
+                if (noteIndex === -1) {
+                    if (noteName === "Bb") noteIndex = notes.indexOf("A#");
+                    else if (noteName === "Eb") noteIndex = notes.indexOf("D#");
+                    else if (noteName === "Ab") noteIndex = notes.indexOf("G#");
+                    else if (noteName === "Db") noteIndex = notes.indexOf("C#");
+                    else if (noteName === "Gb") noteIndex = notes.indexOf("F#");
+                }
+                
+                const stepsFromA4 = noteIndex - notes.indexOf("A") + (octave - 4) * 12;
+                const frequency = tuningFrequencies[tuning] * Math.pow(2, stepsFromA4 / 12);
+                return Math.round(frequency * 100) / 100;
+            }
+            
+            playChord(leftNote, rightNote, frontNote, tuning = "440", duration = 2.0) {
+                if (!this.audioContext || !this.gainNode) {
+                    console.error("Audio not initialized. Call initAudio() first.");
+                    return;
+                }
+                
+                this.stopAll();
+                
+                const frequencies = [
+                    this.getNoteFrequency(leftNote, tuning),
+                    this.getNoteFrequency(rightNote, tuning),
+                    this.getNoteFrequency(frontNote, tuning)
+                ];
+                
+                console.log(`Playing chord: ${leftNote} (${frequencies[0]}Hz), ${rightNote} (${frequencies[1]}Hz), ${frontNote} (${frequencies[2]}Hz)`);
+                
+                frequencies.forEach((freq) => {
+                    const oscillator = this.audioContext.createOscillator();
+                    const noteGain = this.audioContext.createGain();
+                    
+                    oscillator.type = "sine";
+                    oscillator.frequency.value = freq;
+                    
+                    const now = this.audioContext.currentTime;
+                    noteGain.gain.setValueAtTime(0, now);
+                    noteGain.gain.linearRampToValueAtTime(0.2, now + 0.1);
+                    noteGain.gain.setValueAtTime(0.2, now + 0.1);
+                    noteGain.gain.linearRampToValueAtTime(0.2, now + duration - 0.3);
+                    noteGain.gain.linearRampToValueAtTime(0, now + duration);
+                    
+                    oscillator.connect(noteGain);
+                    noteGain.connect(this.gainNode);
+                    
+                    oscillator.start(now);
+                    oscillator.stop(now + duration);
+                    
+                    this.oscillators.push(oscillator);
+                    
+                    oscillator.onended = () => {
+                        const index = this.oscillators.indexOf(oscillator);
+                        if (index > -1) {
+                            this.oscillators.splice(index, 1);
+                        }
+                    };
+                });
+            }
+        }
+        
+        const simplePlayer = new SimpleAudioPlayer();
+        
+        // Get note for a chamber
+        function getNoteForFingering(fluteTypeNotes, upperOpen, lowerOpen) {
+            if (!upperOpen && !lowerOpen) return fluteTypeNotes[0];  // Both closed
+            if (!upperOpen && lowerOpen) return fluteTypeNotes[1];   // Bottom open, top closed
+            if (upperOpen && !lowerOpen) return fluteTypeNotes[2];   // Top open, bottom closed
+            return fluteTypeNotes[3];  // Both open
+        }
+        
+        // Get all notes for a fingering
+        function getNotesForFingering(fingering, fluteType) {
+            const notes = fluteNotes[fluteType];
+            // For left chamber, the naming is inverted: leftUpper is physically lower, leftLower is physically upper
+            const leftNote = getNoteForFingering(notes.left, fingering.leftLower, fingering.leftUpper);
+            // For right chamber, the naming is inverted: rightUpper is physically lower, rightLower is physically upper
+            const rightNote = getNoteForFingering(notes.right, fingering.rightLower, fingering.rightUpper);
+            const frontNote = getNoteForFingering(notes.front, fingering.frontLeft, fingering.frontRight);
+            return { left: leftNote, right: rightNote, front: frontNote };
+        }
+        
+        // Convert fingering to openStates
+        // With rotationDeg=90, holes are at: 0°, 60°, 120°, 180°, 240°, 300°
+        // Mapping: [0]=rightUpper, [1]=rightLower, [2]=leftLower, [3]=leftUpper, [4]=frontLeft, [5]=frontRight
+        function fingeringToOpenStates(fingering) {
+            return [
+                fingering.rightUpper,  // [0] = 0° (right)
+                fingering.rightLower,  // [1] = 60° (right-bottom)
+                fingering.leftLower,   // [2] = 120° (left-bottom)
+                fingering.leftUpper,   // [3] = 180° (left)
+                fingering.frontLeft,   // [4] = 240° (left-top / top-left)
+                fingering.frontRight   // [5] = 300° (right-top / top-right)
+            ];
+        }
+        
+        // Get fingering for chord ID
+        function getFingeringForChord(chordId) {
+            if (chordId < 1 || chordId > 64) {
+                throw new Error(`Chord ID must be between 1 and 64, got ${chordId}`);
+            }
+            return chordToFingering[chordId];
+        }
+        
+        // Current chord state
+        let currentChordId = 1;
+        
+        // Render diagram for a chord ID
+        function renderChord(chordId, fluteType) {
+            const fingering = getFingeringForChord(chordId);
+            const openStates = fingeringToOpenStates(fingering);
+            const notes = getNotesForFingering(fingering, fluteType);
+            
+            const holes = generateCircleHoles(openStates, DEFAULT_RING_RADIUS, DEFAULT_RING_ROTATION_DEG);
+            
+            let holesHTML = '';
+            holes.forEach(h => {
+                holesHTML += `<circle cx="${h.cx}" cy="${h.cy}" r="${DEFAULT_HOLE_RADIUS}" data-open="${h.open}" />`;
+            });
+            
+            const armsHTML = renderArms(
+                CENTER_X, CENTER_Y, 
+                DEFAULT_RING_RADIUS, DEFAULT_HOLE_RADIUS, DEFAULT_CENTER_RADIUS, 
+                DEFAULT_RING_ROTATION_DEG, DEFAULT_ARM_THICKNESS, DEFAULT_ARM_LENGTH
+            );
+            
+            const labelsHTML = renderLabels(CENTER_X, CENTER_Y, DEFAULT_ARM_LENGTH, notes.front, notes.left, notes.right);
+            
+            document.getElementById('fingering-diagram').innerHTML = 
+                armsHTML + 
+                holesHTML +
+                `<circle cx="${CENTER_X}" cy="${CENTER_Y}" r="${DEFAULT_CENTER_RADIUS}" fill="white" stroke="black" strokeWidth="2" />` +
+                `<text x="${CENTER_X}" y="${CENTER_Y}" dy="${CENTER_TEXT_VERTICAL_OFFSET}em" text-anchor="middle" dominant-baseline="middle" class="fg-label fg-val">${chordId}</text>` +
+                labelsHTML;
+            
+            // Store current notes for playback
+            currentNotes = notes;
+            
+            // Update chord info
+            document.getElementById('chord-info').textContent = `Chord ${chordId} / 64`;
+            
+            // Update buttons
+            document.getElementById('btn-prev').disabled = (chordId === 1);
+            document.getElementById('btn-next').disabled = (chordId === 64);
+        }
+        
+        // Play chord handler
+        async function handlePlayChord() {
+            try {
+                await simplePlayer.initAudio();
+                simplePlayer.playChord(currentNotes.left, currentNotes.right, currentNotes.front, "440");
+                
+                // Add visual feedback
+                const container = document.getElementById('chord-card-container');
+                if (container) {
+                    container.classList.add('active');
+                    isDiagramActive = true;
+                    
+                    // Remove active state after audio finishes playing (2 seconds duration)
+                    setTimeout(() => {
+                        container.classList.remove('active');
+                        isDiagramActive = false;
+                    }, 2000);
+                }
+            } catch (err) {
+                console.error("Error playing chord:", err);
+            }
+        }
+        
+        // Handle click on diagram
+        function handleDiagramClick(event) {
+            // Only trigger if not clicking on a button or control
+            if (event.target.closest('.btn-nav') || event.target.closest('select')) {
+                return;
+            }
+            handlePlayChord();
+        }
+        
+        // Navigation handlers
+        function handlePrevious() {
+            if (currentChordId > 1) {
+                currentChordId--;
+                renderChord(currentChordId, currentFluteType);
+                // Automatically play the chord
+                setTimeout(() => handlePlayChord(), 100);
+            }
+        }
+        
+        function handleNext() {
+            if (currentChordId < 64) {
+                currentChordId++;
+                renderChord(currentChordId, currentFluteType);
+                // Automatically play the chord
+                setTimeout(() => handlePlayChord(), 100);
+            }
+        }
+        
+        // Flute type change handler
+        function handleFluteTypeChange(event) {
+            currentFluteType = event.target.value;
+            renderChord(currentChordId, currentFluteType);
+            // Automatically play the chord with new flute type
+            setTimeout(() => handlePlayChord(), 100);
+        }
+        
+        // Initialize diagram
+        window.onload = function() {
+            // Populate flute selector
+            const fluteSelect = document.getElementById('flute-select');
+            Object.keys(fluteNotes).forEach(fluteType => {
+                const option = document.createElement('option');
+                option.value = fluteType;
+                option.textContent = fluteType;
+                if (fluteType === 'Cm4') option.selected = true;
+                fluteSelect.appendChild(option);
+            });
+            
+            renderChord(1, currentFluteType);
+            
+            document.getElementById('btn-prev').addEventListener('click', handlePrevious);
+            document.getElementById('btn-next').addEventListener('click', handleNext);
+            document.getElementById('flute-select').addEventListener('change', handleFluteTypeChange);
+            document.getElementById('btn-play').addEventListener('click', handlePlayChord);
+            
+            // Add click handler to diagram container
+            const diagramContainer = document.getElementById('chord-card-container');
+            if (diagramContainer) {
+                diagramContainer.addEventListener('click', handleDiagramClick);
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="demo-container">
+        <h1>Fingering Diagram - Isolated View</h1>
+        
+        <div class="chord-browser">
+            <div class="flute-selector">
+                <label for="flute-select">Fluitstemming:</label>
+                <select id="flute-select">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
+            
+            <div class="nav-controls">
+                <button id="btn-prev" class="btn-nav">← Previous</button>
+                <div id="chord-info" class="chord-info">Chord 1 / 64</div>
+                <button id="btn-next" class="btn-nav">Next →</button>
+            </div>
+            
+            <div class="chord-card chord-card--fluid" id="chord-card-container">
+                <svg class="fingering" viewBox="0 0 120 120" preserveAspectRatio="xMidYMid meet" style="width: 280px; height: 280px;" id="fingering-diagram">
+                    <!-- Content will be generated by JavaScript -->
+                </svg>
+            </div>
+            
+            <button id="btn-play" class="btn-nav" style="margin-top: 16px;">▶ Play Chord</button>
+        </div>
+    </div>
+</body>
+</html>

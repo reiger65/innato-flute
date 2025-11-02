@@ -1,0 +1,52 @@
+:root {
+	/* Colors */
+	--color-black: #000000;
+	--color-white: #FFFFFF;
+	--color-gray-300: #D1D5DB;
+
+	/* Theme */
+	--bg-color: var(--color-white);
+	--text-color: var(--color-black);
+	--border-color: var(--color-black);
+
+	/* Typography */
+	--font-sans: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--font-size-xs: 12px;
+	--font-size-sm: 14px;
+	--font-size-base: 16px;
+	--font-size-lg: 18px;
+	--font-size-xl: 24px;
+	--font-size-2xl: 30px;
+	--font-weight-normal: 400;
+	--font-weight-semibold: 600;
+	--font-weight-bold: 700;
+
+	/* Spacing */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+
+	/* Radii */
+	--radius-0: 0px;
+	--radius-2: 8px;
+	--radius-full: 9999px;
+
+	/* Lines */
+	--border-1: 1px;
+	--border-2: 2px;
+
+	/* Chord Card */
+	--chord-card-size: 65px;
+	--chord-card-radius: var(--radius-2);
+	--chord-card-border: var(--border-2) solid var(--border-color);
+
+	/* Fingering Diagram */
+	--fingering-scale: 0.8;
+	--hole-stroke: 1.5px;
+	--hole-fill-open: var(--color-white);
+	--hole-fill-closed: var(--color-black);
+}
+
+
+
