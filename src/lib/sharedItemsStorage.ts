@@ -126,11 +126,18 @@ export function loadSharedProgressions(): SharedProgression[] {
  * Load all shared compositions from Supabase or localStorage
  */
 export async function loadSharedCompositions(): Promise<SharedComposition[]> {
+	console.log('[sharedItemsStorage] loadSharedCompositions called')
+	console.log('[sharedItemsStorage] isSupabaseConfigured:', isSupabaseConfigured())
+	
 	if (isSupabaseConfigured()) {
 		try {
 			const supabase = getSupabaseClient()
-			if (!supabase) return loadLocalSharedCompositions()
+			if (!supabase) {
+				console.warn('[sharedItemsStorage] Supabase client is null, using localStorage')
+				return loadLocalSharedCompositions()
+			}
 			
+			console.log('[sharedItemsStorage] Loading public compositions from Supabase...')
 			// Load public compositions from Supabase
 			const { data, error } = await supabase
 				.from('compositions')
@@ -139,9 +146,12 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 				.order('updated_at', { ascending: false })
 			
 			if (error) {
-				console.warn('[sharedItemsStorage] Supabase error loading shared compositions:', error)
+				console.error('[sharedItemsStorage] Supabase error loading shared compositions:', error)
+				console.error('[sharedItemsStorage] Error details:', JSON.stringify(error, null, 2))
 				return loadLocalSharedCompositions()
 			}
+			
+			console.log('[sharedItemsStorage] Loaded', data?.length || 0, 'public compositions from Supabase')
 			
 			// Transform Supabase data to SharedComposition format
 			const sharedCompositions: SharedComposition[] = (data || []).map(item => ({
@@ -169,14 +179,20 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			const supabaseIds = new Set(sharedCompositions.map(c => c.id))
 			const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
 			
-			return [...sharedCompositions, ...localOnly]
+			const result = [...sharedCompositions, ...localOnly]
+			console.log('[sharedItemsStorage] Returning', result.length, 'total shared compositions (', sharedCompositions.length, 'from Supabase,', localOnly.length, 'from localStorage)')
+			return result
 		} catch (error) {
-			console.error('[sharedItemsStorage] Error loading shared compositions from Supabase:', error)
+			console.error('[sharedItemsStorage] Exception loading shared compositions from Supabase:', error)
+			console.error('[sharedItemsStorage] Error stack:', error instanceof Error ? error.stack : 'N/A')
 			return loadLocalSharedCompositions()
 		}
 	}
 	
-	return loadLocalSharedCompositions()
+	console.log('[sharedItemsStorage] Supabase not configured, using localStorage only')
+	const local = loadLocalSharedCompositions()
+	console.log('[sharedItemsStorage] Loaded', local.length, 'compositions from localStorage')
+	return local
 }
 
 /**
