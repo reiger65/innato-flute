@@ -109,8 +109,8 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 					<p>Click the circle icon on a chord to select it, then click "Save to composer" to add your selected chords. You can also click the heart icon to add chords to your favorites.</p>
 				</div>
 
-				{/* Tabs and Search Bar */}
-				<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+				{/* Tabs */}
+				<div style={{ marginBottom: 'var(--space-3)' }}>
 					<div className="chord-selector-tabs">
 						<button
 							className={`chord-selector-tab ${activeTab === 'finder' ? 'is-active' : ''}`}
@@ -131,9 +131,12 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 							Favorites
 						</button>
 					</div>
+				</div>
 
+				{/* Search Bar and Save Button - Aligned */}
+				<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
 					{/* Search Bar */}
-					<div className="chord-selector-search" style={{ flex: '0 0 auto', width: 'auto', minWidth: '120px' }}>
+					<div className="chord-selector-search" style={{ flex: 1 }}>
 						<svg className="chord-selector-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 							<circle cx="11" cy="11" r="8"></circle>
 							<path d="m21 21-4.35-4.35"></path>
@@ -146,15 +149,13 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 							onChange={(e) => setSearchQuery(e.target.value)}
 						/>
 					</div>
-				</div>
 
-				{/* Save to Composer Button */}
-				<div style={{ padding: '0 var(--space-3)', marginBottom: 'var(--space-2)' }}>
+					{/* Save to Composer Button */}
 					<button
 						className="chord-selector-btn"
 						onClick={handleSaveToComposer}
 						disabled={selectedChordIds.length === 0}
-						style={{ width: '100%' }}
+						style={{ flexShrink: 0 }}
 					>
 						Save to composer {selectedChordIds.length > 0 && `(${selectedChordIds.length})`}
 					</button>
