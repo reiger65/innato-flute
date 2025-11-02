@@ -285,16 +285,6 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 									{loading ? 'Loading...' : viewMode === 'login' ? 'Sign In' : 'Create Account'}
 								</button>
 							</form>
-
-							<p style={{ 
-								marginTop: '24px', 
-								fontSize: 'var(--font-size-xs)', 
-								color: 'var(--color-black)', 
-								opacity: 0.7,
-								textAlign: 'center'
-							}}>
-								This is a local-only authentication system. Your data is stored on your device. Cloud sync will be available soon.
-							</p>
 						</div>
 					)}
 				</div>
