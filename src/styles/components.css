@@ -453,11 +453,11 @@ select.btn-sm:active {
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: min(95vw, 600px);
+	max-width: min(95vw, 100%);
 	width: 100%;
 	max-height: 85vh;
 	overflow-y: auto;
-	padding: var(--space-3);
+	padding: var(--space-2);
 	position: relative;
 }
 
@@ -559,15 +559,9 @@ select.btn-sm:active {
 .chord-selector-grid {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
-	gap: var(--space-2);
+	gap: var(--space-1);
 	margin-top: var(--space-3);
 	padding: 0;
-}
-
-@media (max-width: 640px) {
-	.chord-selector-grid {
-		grid-template-columns: repeat(2, 1fr);
-	}
 }
 
 .chord-selector-item {

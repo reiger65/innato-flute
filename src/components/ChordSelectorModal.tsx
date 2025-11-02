@@ -252,7 +252,7 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 										hideNotes={false}
 										hideChordNumber={false}
 										fluid={true}
-										pixelSize={100}
+										pixelSize={80}
 									/>
 								</div>
 							</div>
