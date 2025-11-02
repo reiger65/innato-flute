@@ -1694,6 +1694,15 @@ select.btn-sm:active {
 	color: var(--color-black);
 }
 
+.community-favorite-btn.disabled {
+	cursor: not-allowed;
+	opacity: 0.4;
+}
+
+.community-favorite-btn.disabled:hover {
+	color: rgba(0, 0, 0, 0.4);
+}
+
 .community-favorite-btn svg {
 	width: 16px;
 	height: 16px;

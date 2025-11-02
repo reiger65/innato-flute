@@ -182,6 +182,14 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 
 
 	const handleToggleFavorite = (itemId: string, itemType: 'progression' | 'composition') => {
+		if (!isAuthenticated) {
+			// Prompt to login
+			if (onShowLogin) {
+				onShowLogin()
+			}
+			return
+		}
+		
 		const isFavorited = isSharedItemFavorited(itemId, itemType)
 		if (isFavorited) {
 			removeSharedFavorite(itemId, itemType)
@@ -206,46 +214,6 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 		compositions: sharedItems.compositions.length
 	})
 
-	// If not authenticated, show introduction and login prompt
-	if (!isAuthenticated) {
-		return (
-			<div className="community-view">
-				<div className="section-title">Community</div>
-				<div className="section-desc" style={{ marginBottom: 'var(--space-4)' }}>
-					Discover and share your favorite progressions and compositions with other INNATO players. Explore what the community has created and let others enjoy your musical explorations.
-				</div>
-				<div style={{
-					textAlign: 'center',
-					padding: 'var(--space-6) var(--space-4)',
-					border: 'var(--border-2) solid var(--color-black)',
-					borderRadius: 'var(--radius-2)',
-					background: 'var(--color-white)',
-					marginTop: 'var(--space-4)'
-				}}>
-					<h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-3)' }}>
-						Login or Create Free Account
-					</h3>
-					<p style={{ fontSize: 'var(--font-size-base)', color: 'rgba(0, 0, 0, 0.7)', marginBottom: 'var(--space-4)', lineHeight: '1.5' }}>
-						To access the Community section, you need to log in or create a free account. Join the INNATO community to share your progressions and compositions, and discover what others have created.
-					</p>
-					<div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'center', flexWrap: 'wrap' }}>
-						<button
-							className="btn-sm is-active"
-							onClick={() => {
-								if (onShowLogin) {
-									onShowLogin()
-								}
-							}}
-							style={{ minWidth: '160px' }}
-						>
-							Login / Sign Up
-						</button>
-					</div>
-				</div>
-			</div>
-		)
-	}
-
 	return (
 		<div className="community-view">
 			{/* Header */}
@@ -257,12 +225,44 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 						Offline mode: Only showing local shared items
 					</span>
 				)}
+				{!isAuthenticated && (
+					<span style={{ display: 'block', marginTop: 'var(--space-2)', color: 'rgba(0, 0, 0, 0.6)', fontSize: 'var(--font-size-sm)' }}>
+						Viewing public items. <button onClick={() => onShowLogin?.()} style={{ textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}>Login</button> to share and favorite.
+					</span>
+				)}
 				{isAuthenticated && (
 					<span style={{ display: 'block', marginTop: 'var(--space-2)', color: 'rgba(0, 0, 0, 0.6)', fontSize: 'var(--font-size-sm)' }}>
 						Logged in: {sharedItems.progressions.length + sharedItems.compositions.length} shared items found
 					</span>
 				)}
 			</div>
+			
+			{/* Login prompt for anonymous users (non-blocking) */}
+			{!isAuthenticated && (
+				<div style={{
+					textAlign: 'center',
+					padding: 'var(--space-3) var(--space-4)',
+					border: 'var(--border-2) solid var(--color-black)',
+					borderRadius: 'var(--radius-2)',
+					background: 'rgba(255, 200, 0, 0.1)',
+					marginBottom: 'var(--space-4)'
+				}}>
+					<p style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(0, 0, 0, 0.7)', marginBottom: 'var(--space-2)' }}>
+						💡 <strong>Create a free account</strong> to share your compositions and favorite items from the community.
+					</p>
+					<button
+						className="btn-sm"
+						onClick={() => {
+							if (onShowLogin) {
+								onShowLogin()
+							}
+						}}
+						style={{ minWidth: '140px' }}
+					>
+						Login / Sign Up
+					</button>
+				</div>
+			)}
 
 			{/* Filters */}
 			<div className="controls" style={{ marginBottom: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -469,13 +469,14 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 										</p>
 									</div>
 									<button
-										className={`community-favorite-btn ${isFavorited ? 'is-favorited' : ''}`}
+										className={`community-favorite-btn ${isFavorited ? 'is-favorited' : ''} ${!isAuthenticated ? 'disabled' : ''}`}
 										onClick={(e) => {
 											e.stopPropagation()
 											handleToggleFavorite(item.id, isProgression ? 'progression' : 'composition')
 										}}
-										aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-										title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+										disabled={!isAuthenticated}
+										aria-label={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
+										title={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
 									>
 										<svg viewBox="0 0 24 24" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ flexShrink: 0 }}>
 											<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
