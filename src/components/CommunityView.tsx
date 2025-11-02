@@ -331,13 +331,28 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 						⚠️ {loadingError}
 					</p>
 					<p style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)', color: 'rgba(0, 0, 0, 0.6)' }}>
-						This might be a network issue on iPhone Safari. The app will retry automatically. Check your internet connection and try again.
+						{typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent) ? (
+							<>iPhone detected. Checking console logs for REST API errors. This might be a Safari-specific issue with Supabase queries.</>
+						) : (
+							<>This might be a network issue. The app will retry automatically. Check your internet connection and try again.</>
+						)}
 					</p>
+					{debugInfo.length > 0 && (
+						<div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-xs)', textAlign: 'left', background: 'rgba(0, 0, 0, 0.05)', padding: 'var(--space-2)', borderRadius: 'var(--radius-1)', maxHeight: '200px', overflow: 'auto' }}>
+							<strong>Debug Info:</strong>
+							{debugInfo.slice(-5).map((info, i) => (
+								<div key={i} style={{ marginTop: '4px', fontFamily: 'monospace' }}>
+									{info.message}
+								</div>
+							))}
+						</div>
+					)}
 					<button 
 						className="btn-sm"
 						onClick={() => {
 							setIsLoading(true)
 							setLoadingError(null)
+							setDebugInfo([])
 							getRankedSharedItems()
 								.then(ranked => {
 									setSharedItems(ranked)
