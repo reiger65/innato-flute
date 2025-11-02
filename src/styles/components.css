@@ -288,10 +288,12 @@ select.btn-sm:active {
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: center;
 	z-index: 2000;
 	padding: var(--space-4);
+	padding-top: var(--space-4);
+	overflow-y: auto;
 }
 
 .modal {
@@ -387,10 +389,12 @@ select.btn-sm:active {
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: center;
 	z-index: 2000;
 	padding: var(--space-2);
+	padding-top: var(--space-4);
+	overflow-y: auto;
 }
 
 .lesson-modal {
@@ -443,10 +447,12 @@ select.btn-sm:active {
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: center;
 	z-index: 2000;
 	padding: var(--space-4);
+	padding-top: var(--space-4);
+	overflow-y: auto;
 }
 
 .chord-selector-modal {
@@ -646,10 +652,12 @@ select.btn-sm:active {
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: center;
 	z-index: 2000;
 	padding: var(--space-4);
+	padding-top: var(--space-4);
+	overflow-y: auto;
 }
 
 .section-info-modal {
@@ -1358,10 +1366,12 @@ select.btn-sm:active {
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: center;
 	z-index: 2000;
 	padding: var(--space-4);
+	padding-top: var(--space-4);
+	overflow-y: auto;
 }
 
 .drone-panel {
