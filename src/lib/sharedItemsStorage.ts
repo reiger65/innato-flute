@@ -209,52 +209,92 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			
 			console.log('[sharedItemsStorage] Loading public compositions from Supabase...')
 			
-			// For Safari, try a simpler direct query first (no retry wrapper)
+			// For Safari, try REST API directly via fetch (bypasses Supabase client issues)
 			if (isSafari()) {
-				console.log('[sharedItemsStorage] Safari detected - using direct query approach')
+				console.log('[sharedItemsStorage] Safari detected - using REST API fetch approach')
 				try {
-					// Direct query with Promise.race for timeout
-					const queryPromise = supabase
+					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
+					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
+					
+					// Use REST API directly - more reliable on Safari
+					const url = `${supabaseUrl}/rest/v1/compositions?select=id,name,chords,tempo,time_signature,created_at,updated_at,user_id,version&is_public=eq.true`
+					
+					console.log('[sharedItemsStorage] Safari: Fetching from REST API:', url.substring(0, 80) + '...')
+					
+					const fetchPromise = fetch(url, {
+						method: 'GET',
+						headers: {
+							'apikey': supabaseKey,
+							'Authorization': `Bearer ${supabaseKey}`,
+							'Content-Type': 'application/json',
+							'Prefer': 'return=representation'
+						}
+					})
+					
+					const timeoutPromise = new Promise<Response>((resolve) => {
+						setTimeout(() => {
+							resolve(new Response(null, { status: 408, statusText: 'Timeout' }))
+						}, 8000)
+					})
+					
+					const response = await Promise.race([fetchPromise, timeoutPromise])
+					
+					if (response.ok && response.status !== 408) {
+						const data = await response.json()
+						console.log('[sharedItemsStorage] ✅ Safari REST API succeeded! Loaded', data.length, 'compositions')
+						
+						if (Array.isArray(data) && data.length > 0) {
+							const sortedData = [...data].sort((a: any, b: any) => {
+								const dateA = new Date(a.updated_at || a.created_at).getTime()
+								const dateB = new Date(b.updated_at || b.created_at).getTime()
+								return dateB - dateA
+							})
+							const sharedCompositions = transformSupabaseCompositions(sortedData)
+							
+							// Merge with localStorage
+							const localShared = loadLocalSharedCompositions()
+							const supabaseIds = new Set(sharedCompositions.map(c => c.id))
+							const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
+							
+							return [...sharedCompositions, ...localOnly]
+						}
+					} else {
+						console.warn('[sharedItemsStorage] Safari REST API error:', response.status, response.statusText)
+					}
+				} catch (safariErr) {
+					console.error('[sharedItemsStorage] Safari REST API exception:', safariErr)
+				}
+				
+				// Try Supabase client as fallback
+				try {
+					console.log('[sharedItemsStorage] Safari: Trying Supabase client as fallback...')
+					const queryResult = await supabase
 						.from('compositions')
 						.select('id, name, chords, tempo, time_signature, created_at, updated_at, user_id, version')
 						.eq('is_public', true)
 					
-					const timeoutPromise = new Promise<{ data: null, error: any }>((resolve) => {
-						setTimeout(() => {
-							resolve({ data: null, error: { message: 'Safari query timeout', code: 'TIMEOUT' } })
-						}, 5000) // 5 second timeout for Safari
-					})
-					
-					const result = await Promise.race([queryPromise, timeoutPromise]) as any
-					
-					if (result.data && Array.isArray(result.data) && result.data.length > 0) {
-						console.log('[sharedItemsStorage] ✅ Safari direct query succeeded! Loaded', result.data.length, 'compositions')
-						const sortedData = [...result.data].sort((a: any, b: any) => {
+					if (queryResult.data && Array.isArray(queryResult.data) && queryResult.data.length > 0) {
+						console.log('[sharedItemsStorage] ✅ Safari Supabase client fallback succeeded!')
+						const sortedData = [...queryResult.data].sort((a: any, b: any) => {
 							const dateA = new Date(a.updated_at || a.created_at).getTime()
 							const dateB = new Date(b.updated_at || b.created_at).getTime()
 							return dateB - dateA
 						})
 						const sharedCompositions = transformSupabaseCompositions(sortedData)
 						
-						// Merge with localStorage
 						const localShared = loadLocalSharedCompositions()
 						const supabaseIds = new Set(sharedCompositions.map(c => c.id))
 						const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
 						
 						return [...sharedCompositions, ...localOnly]
-					} else if (result.error) {
-						console.warn('[sharedItemsStorage] Safari query error:', result.error)
-						// Fall through to localStorage
-					} else {
-						console.warn('[sharedItemsStorage] Safari query returned empty')
-						// Fall through to localStorage
+					} else if (queryResult.error) {
+						console.warn('[sharedItemsStorage] Safari Supabase client error:', queryResult.error)
 					}
-				} catch (safariErr) {
-					console.error('[sharedItemsStorage] Safari query exception:', safariErr)
-					// Fall through to localStorage
+				} catch (clientErr) {
+					console.error('[sharedItemsStorage] Safari Supabase client exception:', clientErr)
 				}
 				
-				// For Safari, always try localStorage as fallback
+				// Final fallback to localStorage
 				console.log('[sharedItemsStorage] Safari: Falling back to localStorage')
 				const localShared = loadLocalSharedCompositions()
 				if (localShared.length > 0) {
