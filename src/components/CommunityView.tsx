@@ -215,6 +215,11 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 						Offline mode: Only showing local shared items
 					</span>
 				)}
+				{isAuthenticated && (
+					<span style={{ display: 'block', marginTop: 'var(--space-2)', color: 'rgba(0, 0, 0, 0.6)', fontSize: 'var(--font-size-sm)' }}>
+						Logged in: {sharedItems.progressions.length + sharedItems.compositions.length} shared items found
+					</span>
+				)}
 			</div>
 
 			{/* Filters */}
@@ -302,7 +307,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 						⚠️ {loadingError}
 					</p>
 					<p style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)', color: 'rgba(0, 0, 0, 0.6)' }}>
-						Are you logged in? Make sure you're logged in with the same account on both devices.
+						Desktop shows {sharedItems.progressions.length + sharedItems.compositions.length} items. iPhone may have a connection issue. Try refreshing or check your network connection.
 					</p>
 					<button 
 						className="btn-sm"
