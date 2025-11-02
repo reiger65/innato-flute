@@ -236,33 +236,6 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 					</span>
 				)}
 			</div>
-			
-			{/* Login prompt for anonymous users (non-blocking) */}
-			{!isAuthenticated && (
-				<div style={{
-					textAlign: 'center',
-					padding: 'var(--space-3) var(--space-4)',
-					border: 'var(--border-2) solid var(--color-black)',
-					borderRadius: 'var(--radius-2)',
-					background: 'rgba(255, 200, 0, 0.1)',
-					marginBottom: 'var(--space-4)'
-				}}>
-					<p style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(0, 0, 0, 0.7)', marginBottom: 'var(--space-2)' }}>
-						💡 <strong>Create a free account</strong> to share your compositions and favorite items from the community.
-					</p>
-					<button
-						className="btn-sm"
-						onClick={() => {
-							if (onShowLogin) {
-								onShowLogin()
-							}
-						}}
-						style={{ minWidth: '140px' }}
-					>
-						Login / Sign Up
-					</button>
-				</div>
-			)}
 
 			{/* Filters */}
 			<div className="controls" style={{ marginBottom: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
