@@ -18,3 +18,4 @@ WHERE email = 'info@stonewhistle.com';
 -- Voor het aanmaken: gebruik de Supabase Dashboard UI
 -- Authentication → Users → Add user → Create new user
 
+

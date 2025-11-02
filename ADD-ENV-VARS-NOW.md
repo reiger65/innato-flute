@@ -90,3 +90,4 @@ console.log('URL:', import.meta.env.VITE_SUPABASE_URL)
 
 Laat weten wat je ziet!
 
+

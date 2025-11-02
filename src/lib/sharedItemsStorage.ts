@@ -108,9 +108,9 @@ function getCurrentUsername(): string {
 }
 
 /**
- * Load all shared progressions
+ * Load shared progressions from localStorage (fallback)
  */
-export function loadSharedProgressions(): SharedProgression[] {
+function loadLocalSharedProgressions(): SharedProgression[] {
 	try {
 		const data = localStorage.getItem(STORAGE_KEY_PROGRESSIONS)
 		if (data) {
@@ -120,6 +120,341 @@ export function loadSharedProgressions(): SharedProgression[] {
 		console.error('Error loading shared progressions:', error)
 	}
 	return []
+}
+
+/**
+ * Load all shared progressions from Supabase or localStorage
+ */
+export async function loadSharedProgressions(): Promise<SharedProgression[]> {
+	console.log('[sharedItemsStorage] loadSharedProgressions called')
+	console.log('[sharedItemsStorage] isSupabaseConfigured:', isSupabaseConfigured())
+	console.log('[sharedItemsStorage] Browser:', isSafari() ? 'Safari/iOS' : 'Other')
+	clearLastRestApiError() // Clear previous error
+	
+	// Transform function
+	function transformSupabaseProgressions(items: any[]): SharedProgression[] {
+		return items.map(item => ({
+			id: item.id,
+			originalId: item.id,
+			name: item.name,
+			chordIds: item.chord_ids,
+			sharedBy: item.user_id,
+			sharedByUsername: 'Anonymous',
+			sharedAt: new Date(item.created_at).getTime(),
+			isPublic: true,
+			favoriteCount: 0,
+			createdAt: new Date(item.created_at).getTime(),
+			version: item.version || 1
+		}))
+	}
+	
+	if (isSupabaseConfigured()) {
+		try {
+			const supabase = getSupabaseClient()
+			if (!supabase) {
+				console.warn('[sharedItemsStorage] Supabase client is null, using localStorage')
+				return loadLocalSharedProgressions()
+			}
+			
+			console.log('[sharedItemsStorage] Loading public progressions from Supabase...')
+			
+			// Try REST API directly via fetch first (works better on Safari/iOS)
+			const isIOSDevice = isIOS()
+			const useRestApi = isIOSDevice || isSafari() || true // Always use REST API for now
+			if (useRestApi) {
+				console.log('[sharedItemsStorage] Using REST API fetch approach for progressions (iOS:', isIOSDevice, ', Safari:', isSafari(), ')')
+				try {
+					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
+					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
+					
+					console.log('[sharedItemsStorage] Progressions REST API config check:', {
+						hasUrl: !!supabaseUrl,
+						hasKey: !!supabaseKey,
+						urlSource: import.meta.env.VITE_SUPABASE_URL ? 'env' : 'hardcoded',
+						keySource: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'env' : 'hardcoded'
+					})
+					
+					// Use REST API directly - more reliable on Safari
+					const url = `${supabaseUrl}/rest/v1/progressions?select=id,name,chord_ids,created_at,updated_at,user_id,version&is_public=eq.true`
+					
+					console.log('[sharedItemsStorage] Full REST API URL for progressions:', url)
+					
+					const headers: Record<string, string> = {
+						'apikey': supabaseKey,
+						'Authorization': `Bearer ${supabaseKey}`,
+						'Content-Type': 'application/json',
+						'Prefer': 'return=representation'
+					}
+					
+					const fetchOptions: RequestInit = {
+						method: 'GET',
+						headers: headers,
+						cache: 'no-cache',
+						mode: 'cors',
+						credentials: 'omit'
+					}
+					
+					const fetchPromise = fetch(url, fetchOptions)
+					
+					const timeoutPromise = new Promise<Response>((resolve) => {
+						setTimeout(() => {
+							console.warn('[sharedItemsStorage] Progressions REST API timeout after 8 seconds')
+							resolve(new Response(null, { status: 408, statusText: 'Timeout' }))
+						}, 8000)
+					})
+					
+					const startTime = Date.now()
+					let response: Response
+					try {
+						response = await Promise.race([fetchPromise, timeoutPromise])
+					} catch (fetchError) {
+						console.error('[sharedItemsStorage] Progressions fetch promise rejected:', fetchError)
+						if (fetchError instanceof Error) {
+							const errorMsg = `Fetch failed: ${fetchError.message}`
+							lastRestApiError = errorMsg
+							console.error('[sharedItemsStorage]', errorMsg)
+						}
+						throw fetchError
+					}
+					const duration = Date.now() - startTime
+					
+					console.log('[sharedItemsStorage] Progressions REST API response:', {
+						status: response.status,
+						statusText: response.statusText,
+						ok: response.ok,
+						duration: `${duration}ms`
+					})
+					
+					if (response.ok && response.status !== 408) {
+						try {
+							const data = await response.json()
+							console.log('[sharedItemsStorage] ✅ Progressions REST API succeeded! Loaded', data.length, 'progressions')
+							
+							if (!Array.isArray(data)) {
+								console.error('[sharedItemsStorage] Expected array but got:', typeof data)
+								throw new Error('Invalid response format')
+							}
+							
+							if (Array.isArray(data)) {
+								if (data.length > 0) {
+									const sortedData = [...data].sort((a: any, b: any) => {
+										const dateA = new Date(a.updated_at || a.created_at).getTime()
+										const dateB = new Date(b.updated_at || b.created_at).getTime()
+										return dateB - dateA
+									})
+									const sharedProgressions = transformSupabaseProgressions(sortedData)
+									
+									// Merge with localStorage
+									const localShared = loadLocalSharedProgressions()
+									const supabaseIds = new Set(sharedProgressions.map(p => p.id))
+									const localOnly = localShared.filter(p => !supabaseIds.has(p.id))
+									
+									console.log('[sharedItemsStorage] ✅ Successfully loaded progressions via REST API:', sharedProgressions.length, 'from Supabase,', localOnly.length, 'from localStorage')
+									return [...sharedProgressions, ...localOnly]
+								} else {
+									console.warn('[sharedItemsStorage] Progressions REST API returned empty array (successful but no data)')
+									const errorMsg = 'REST API query succeeded but returned 0 progressions. Will try Supabase client fallback.'
+									lastRestApiError = errorMsg
+									// Continue to Supabase client fallback below
+								}
+							}
+						} catch (parseErr) {
+							console.error('[sharedItemsStorage] Error parsing progressions JSON response:', parseErr)
+							throw parseErr
+						}
+					} else {
+						let errorText = ''
+						try {
+							errorText = await response.text()
+							const errorDetails = {
+								status: response.status,
+								statusText: response.statusText,
+								body: errorText.substring(0, 500)
+							}
+							console.error('[sharedItemsStorage] Progressions REST API error response:', errorDetails)
+							const errorMsg = `REST API ${response.status}: ${response.statusText} - ${errorText.substring(0, 200)}`
+							lastRestApiError = errorMsg
+							throw new Error(errorMsg)
+						} catch (textErr) {
+							if (textErr instanceof Error && textErr.message.includes('REST API')) {
+								throw textErr
+							}
+							console.error('[sharedItemsStorage] Progressions REST API error (could not read body):', response.status, response.statusText)
+							const errorMsg = `REST API ${response.status}: ${response.statusText}`
+							lastRestApiError = errorMsg
+							throw new Error(errorMsg)
+						}
+					}
+				} catch (restApiErr) {
+					console.error('[sharedItemsStorage] Progressions REST API exception:', restApiErr)
+					if (restApiErr instanceof Error) {
+						const errorMsg = `REST API failed: ${restApiErr.message}`
+						if (!lastRestApiError) {
+							lastRestApiError = errorMsg
+						}
+						console.error('[sharedItemsStorage]', errorMsg)
+						console.log('[sharedItemsStorage] Will try Supabase client fallback...')
+					}
+				}
+				
+				// ALWAYS try Supabase client as fallback (even if REST API failed or returned empty)
+				try {
+					console.log('[sharedItemsStorage] Trying Supabase client as fallback for progressions...')
+					const queryResult = await supabase
+						.from('progressions')
+						.select('id, name, chord_ids, created_at, updated_at, user_id, version')
+						.eq('is_public', true)
+					
+					console.log('[sharedItemsStorage] Supabase client query result:', {
+						hasData: !!queryResult.data,
+						dataLength: queryResult.data?.length || 0,
+						hasError: !!queryResult.error,
+						errorCode: queryResult.error?.code,
+						errorMessage: queryResult.error?.message
+					})
+					
+					if (queryResult.data && Array.isArray(queryResult.data) && queryResult.data.length > 0) {
+						console.log('[sharedItemsStorage] ✅ Progressions Supabase client fallback succeeded! Loaded', queryResult.data.length, 'progressions')
+						const sortedData = [...queryResult.data].sort((a: any, b: any) => {
+							const dateA = new Date(a.updated_at || a.created_at).getTime()
+							const dateB = new Date(b.updated_at || b.created_at).getTime()
+							return dateB - dateA
+						})
+						const sharedProgressions = transformSupabaseProgressions(sortedData)
+						
+						const localShared = loadLocalSharedProgressions()
+						const supabaseIds = new Set(sharedProgressions.map(p => p.id))
+						const localOnly = localShared.filter(p => !supabaseIds.has(p.id))
+						
+						console.log('[sharedItemsStorage] Returning', sharedProgressions.length, 'from Supabase,', localOnly.length, 'from localStorage')
+						return [...sharedProgressions, ...localOnly]
+					} else if (queryResult.error) {
+						console.error('[sharedItemsStorage] Progressions Supabase client error:', queryResult.error)
+						if (!lastRestApiError) {
+							lastRestApiError = `Supabase client error: ${queryResult.error.message}`
+						}
+					} else {
+						console.warn('[sharedItemsStorage] Progressions Supabase client returned empty result (no error, but no data)')
+					}
+				} catch (clientErr) {
+					console.error('[sharedItemsStorage] Progressions Supabase client exception:', clientErr)
+					if (clientErr instanceof Error && !lastRestApiError) {
+						lastRestApiError = `Supabase client exception: ${clientErr.message}`
+					}
+				}
+				
+				// Final fallback to localStorage
+				console.log('[sharedItemsStorage] Both REST API and Supabase client failed or returned empty, falling back to localStorage')
+				const localShared = loadLocalSharedProgressions()
+				console.log('[sharedItemsStorage] Found', localShared.length, 'progressions in localStorage')
+				if (localShared.length === 0) {
+					console.warn('[sharedItemsStorage] ⚠️ No progressions found anywhere - REST API failed, Supabase client failed, and localStorage is empty')
+				}
+				return localShared
+			}
+			
+			// For non-Safari browsers, use retry logic
+			let hasSession = false
+			try {
+				const { data: sessionData } = await supabase.auth.getSession()
+				hasSession = !!sessionData?.session
+				console.log('[sharedItemsStorage] Progressions session check:', hasSession ? 'authenticated' : 'anonymous')
+			} catch (sessionErr) {
+				console.warn('[sharedItemsStorage] Could not check session:', sessionErr)
+			}
+			
+			// Strategy 1: Query with retry and timeout (non-Safari)
+			console.log('[sharedItemsStorage] Attempting progressions query with retry logic...')
+			const result = await queryWithRetry(
+				async () => {
+					try {
+						const queryResult = await supabase
+							.from('progressions')
+							.select('id, name, chord_ids, created_at, updated_at, user_id, version')
+							.eq('is_public', true)
+						
+						console.log('[sharedItemsStorage] Progressions query result:', {
+							hasData: !!queryResult.data,
+							dataLength: queryResult.data?.length || 0,
+							hasError: !!queryResult.error,
+							errorCode: queryResult.error?.code,
+							errorMessage: queryResult.error?.message
+						})
+						
+						return {
+							data: queryResult.data || [],
+							error: queryResult.error
+						}
+					} catch (err) {
+						console.error('[sharedItemsStorage] Progressions query exception:', err)
+						return {
+							data: null,
+							error: err
+						}
+					}
+				},
+				3,
+				10000
+			)
+			
+			// If we got data, use it
+			if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+				console.log('[sharedItemsStorage] ✅ Successfully loaded', result.data.length, 'public progressions from Supabase')
+				
+				const sortedData = [...result.data].sort((a: any, b: any) => {
+					const dateA = new Date(a.updated_at || a.created_at).getTime()
+					const dateB = new Date(b.updated_at || b.created_at).getTime()
+					return dateB - dateA
+				})
+				const sharedProgressions = transformSupabaseProgressions(sortedData)
+				
+				const localShared = loadLocalSharedProgressions()
+				const supabaseIds = new Set(sharedProgressions.map(p => p.id))
+				const localOnly = localShared.filter(p => !supabaseIds.has(p.id))
+				
+				const mergedProgressions = [...sharedProgressions, ...localOnly]
+				console.log('[sharedItemsStorage] Returning', mergedProgressions.length, 'total shared progressions (', sharedProgressions.length, 'from Supabase,', localOnly.length, 'from localStorage)')
+				return mergedProgressions
+			}
+			
+			// If query returned empty array
+			if (result.data && Array.isArray(result.data) && result.data.length === 0) {
+				console.warn('[sharedItemsStorage] Progressions query succeeded but returned 0 public progressions')
+				const localShared = loadLocalSharedProgressions()
+				if (localShared.length > 0) {
+					console.log('[sharedItemsStorage] Found', localShared.length, 'progressions in localStorage fallback')
+					return localShared
+				}
+				return []
+			}
+			
+			// If error occurred, log details
+			if (result.error) {
+				console.error('[sharedItemsStorage] ❌ Progressions query failed:', {
+					code: result.error.code,
+					message: result.error.message,
+					hasSession
+				})
+			}
+			
+			// Fallback to localStorage
+			console.log('[sharedItemsStorage] Falling back to localStorage for progressions...')
+			const localShared = loadLocalSharedProgressions()
+			console.log('[sharedItemsStorage] Loaded', localShared.length, 'progressions from localStorage fallback')
+			return localShared
+			
+		} catch (error) {
+			console.error('[sharedItemsStorage] Exception loading shared progressions from Supabase:', error)
+			const localShared = loadLocalSharedProgressions()
+			console.log('[sharedItemsStorage] Loaded', localShared.length, 'progressions from localStorage after exception')
+			return localShared
+		}
+	}
+	
+	console.log('[sharedItemsStorage] Supabase not configured, using localStorage only for progressions')
+	const local = loadLocalSharedProgressions()
+	console.log('[sharedItemsStorage] Loaded', local.length, 'progressions from localStorage')
+	return local
 }
 
 /**
@@ -249,6 +584,13 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
 					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
 					
+					console.log('[sharedItemsStorage] Supabase config check:', {
+						hasUrl: !!supabaseUrl,
+						hasKey: !!supabaseKey,
+						urlSource: import.meta.env.VITE_SUPABASE_URL ? 'env' : 'hardcoded',
+						keySource: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'env' : 'hardcoded'
+					})
+					
 					// Use REST API directly - more reliable on Safari
 					// URL encode the filter parameter properly
 					const url = `${supabaseUrl}/rest/v1/compositions?select=id,name,chords,tempo,time_signature,created_at,updated_at,user_id,version&is_public=eq.true`
@@ -297,9 +639,12 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					} catch (fetchError) {
 						console.error('[sharedItemsStorage] Fetch promise rejected:', fetchError)
 						if (fetchError instanceof Error) {
-							const errorMsg = `Fetch failed: ${fetchError.message}`
+							const errorMsg = `Network error: ${fetchError.message} (CORS or connectivity issue on iOS?)`
 							lastRestApiError = errorMsg
 							console.error('[sharedItemsStorage]', errorMsg)
+							console.error('[sharedItemsStorage] Full error:', fetchError)
+							// Don't throw - let it fall through to try Supabase client fallback
+							throw fetchError
 						}
 						throw fetchError
 					}
@@ -323,20 +668,37 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 								throw new Error('Invalid response format')
 							}
 							
-							if (Array.isArray(data) && data.length > 0) {
-								const sortedData = [...data].sort((a: any, b: any) => {
-									const dateA = new Date(a.updated_at || a.created_at).getTime()
-									const dateB = new Date(b.updated_at || b.created_at).getTime()
-									return dateB - dateA
-								})
-								const sharedCompositions = transformSupabaseCompositions(sortedData)
-								
-								// Merge with localStorage
-								const localShared = loadLocalSharedCompositions()
-								const supabaseIds = new Set(sharedCompositions.map(c => c.id))
-								const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
-								
-								return [...sharedCompositions, ...localOnly]
+							if (Array.isArray(data)) {
+								if (data.length > 0) {
+									const sortedData = [...data].sort((a: any, b: any) => {
+										const dateA = new Date(a.updated_at || a.created_at).getTime()
+										const dateB = new Date(b.updated_at || b.created_at).getTime()
+										return dateB - dateA
+									})
+									const sharedCompositions = transformSupabaseCompositions(sortedData)
+									
+									// Merge with localStorage
+									const localShared = loadLocalSharedCompositions()
+									const supabaseIds = new Set(sharedCompositions.map(c => c.id))
+									const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
+									
+									return [...sharedCompositions, ...localOnly]
+								} else {
+									// Empty array - query succeeded but no results
+									console.warn('[sharedItemsStorage] REST API returned empty array (successful but no data)')
+									console.warn('[sharedItemsStorage] This might mean:')
+									console.warn('[sharedItemsStorage]   1. No compositions marked as is_public=true')
+									console.warn('[sharedItemsStorage]   2. RLS policy blocking anonymous access')
+									const errorMsg = 'Query succeeded but returned 0 items. Check RLS policies allow anonymous SELECT on is_public=true'
+									lastRestApiError = errorMsg
+									// Try localStorage fallback before giving up
+									const localShared = loadLocalSharedCompositions()
+									if (localShared.length > 0) {
+										console.log('[sharedItemsStorage] Found', localShared.length, 'compositions in localStorage fallback')
+										return localShared
+									}
+									// Continue to Supabase client fallback
+								}
 							}
 						} catch (parseErr) {
 							console.error('[sharedItemsStorage] Safari: Error parsing JSON response:', parseErr)
@@ -556,17 +918,135 @@ function loadLocalSharedCompositions(): SharedComposition[] {
 }
 
 /**
- * Save shared progression
+ * Save shared progression to Supabase and localStorage
  */
-export function saveSharedProgression(
+export async function saveSharedProgression(
 	progression: Omit<SharedProgression, 'id' | 'sharedBy' | 'sharedByUsername' | 'sharedAt' | 'favoriteCount' | 'version'>,
 	isUpdate: boolean = false
-): SharedProgression {
-	const shared = loadSharedProgressions()
+): Promise<SharedProgression> {
 	const currentUserId = getCurrentUserId()
 	const now = Date.now()
 	
-	// Check if this progression was already shared by this user
+	// Try to save to Supabase first
+	if (isSupabaseConfigured()) {
+		try {
+			const supabase = getSupabaseClient()
+			const user = getCurrentUser()
+			
+			if (supabase && user) {
+				const { data: { session } } = await supabase.auth.getSession()
+				if (session?.user?.id) {
+					console.log('[sharedItemsStorage] Sharing progression:', progression.name, 'originalId:', progression.originalId)
+					
+					// First, try to save the progression to Supabase if it doesn't exist
+					// Check if progression exists in Supabase
+					let progressionId = progression.originalId
+					let existing = null
+					
+					try {
+						const { data: checkExisting } = await supabase
+							.from('progressions')
+							.select('id, version')
+							.eq('id', progression.originalId)
+							.eq('user_id', session.user.id)
+							.single()
+						
+						existing = checkExisting
+					} catch {
+						// Progression doesn't exist in Supabase yet - that's OK, we'll create it
+						console.log('[sharedItemsStorage] Progression not found in Supabase, will create new one')
+					}
+					
+					if (!existing) {
+						// Progression doesn't exist in Supabase - save it first
+						console.log('[sharedItemsStorage] Saving progression to Supabase first...')
+						const { data: inserted, error: insertError } = await supabase
+							.from('progressions')
+							.insert({
+								user_id: session.user.id,
+								name: progression.name,
+								chord_ids: progression.chordIds,
+								is_public: true, // Mark as public immediately
+								version: 1
+							})
+							.select()
+							.single()
+						
+						if (insertError) {
+							console.error('[sharedItemsStorage] Error inserting progression:', insertError)
+							throw insertError
+						}
+						
+						if (inserted) {
+							progressionId = inserted.id
+							console.log('[sharedItemsStorage] Progression saved to Supabase with ID:', progressionId)
+							const saved: SharedProgression = {
+								id: inserted.id,
+								originalId: inserted.id,
+								name: inserted.name,
+								chordIds: inserted.chord_ids,
+								sharedBy: session.user.id,
+								sharedByUsername: getCurrentUsername(),
+								sharedAt: new Date(inserted.created_at).getTime(),
+								isPublic: true,
+								favoriteCount: 0,
+								createdAt: new Date(inserted.created_at).getTime(),
+								version: inserted.version || 1
+							}
+							
+							saveLocalSharedProgression(saved)
+							return saved
+						}
+					} else {
+						// Progression exists - update it to be public
+						console.log('[sharedItemsStorage] Progression exists, updating to public...')
+						const { data: updated, error } = await supabase
+							.from('progressions')
+							.update({
+								name: progression.name,
+								chord_ids: progression.chordIds,
+								is_public: true,
+								version: isUpdate ? (existing.version || 1) + 1 : existing.version || 1
+							})
+							.eq('id', progression.originalId)
+							.eq('user_id', session.user.id)
+							.select()
+							.single()
+						
+						if (error) {
+							console.error('[sharedItemsStorage] Error updating progression:', error)
+							throw error
+						}
+						
+						if (updated) {
+							console.log('[sharedItemsStorage] Progression updated to public:', updated.id)
+							const saved: SharedProgression = {
+								id: updated.id,
+								originalId: updated.id,
+								name: updated.name,
+								chordIds: updated.chord_ids,
+								sharedBy: session.user.id,
+								sharedByUsername: getCurrentUsername(),
+								sharedAt: new Date(updated.created_at).getTime(),
+								isPublic: true,
+								favoriteCount: 0,
+								createdAt: new Date(updated.created_at).getTime(),
+								version: updated.version || 1
+							}
+							
+							saveLocalSharedProgression(saved)
+							return saved
+						}
+					}
+				}
+			}
+		} catch (error) {
+			console.warn('[sharedItemsStorage] Error saving progression to Supabase, falling back to localStorage:', error)
+		}
+	}
+	
+	// Fallback to localStorage only
+	const shared = loadLocalSharedProgressions()
 	const existingIndex = shared.findIndex(
 		s => s.originalId === progression.originalId && s.sharedBy === currentUserId
 	)
@@ -606,6 +1086,20 @@ export function saveSharedProgression(
 	
 	localStorage.setItem(STORAGE_KEY_PROGRESSIONS, JSON.stringify(shared))
 	return saved
+}
+
+/**
+ * Save shared progression to localStorage (helper)
+ */
+function saveLocalSharedProgression(saved: SharedProgression): void {
+	const shared = loadLocalSharedProgressions()
+	const existingIndex = shared.findIndex(s => s.id === saved.id)
+	if (existingIndex >= 0) {
+		shared[existingIndex] = saved
+	} else {
+		shared.push(saved)
+	}
+	localStorage.setItem(STORAGE_KEY_PROGRESSIONS, JSON.stringify(shared))
 }
 
 /**
@@ -849,7 +1343,7 @@ export function addSharedFavorite(itemId: string, itemType: 'progression' | 'com
 	
 	// Update favorite count
 	if (itemType === 'progression') {
-		const shared = loadSharedProgressions()
+		const shared = loadLocalSharedProgressions()
 		const item = shared.find(s => s.id === itemId)
 		if (item) {
 			item.favoriteCount = favorites.filter(f => f.itemId === itemId && f.itemType === 'progression').length
@@ -880,7 +1374,7 @@ export function removeSharedFavorite(itemId: string, itemType: 'progression' | '
 	
 	// Update favorite count
 	if (itemType === 'progression') {
-		const shared = loadSharedProgressions()
+		const shared = loadLocalSharedProgressions()
 		const item = shared.find(s => s.id === itemId)
 		if (item) {
 			item.favoriteCount = filtered.filter(f => f.itemId === itemId && f.itemType === 'progression').length
@@ -911,8 +1405,14 @@ export function isSharedItemFavorited(itemId: string, itemType: 'progression' | 
  * Get shared items sorted by favorite count (for ranking)
  */
 export async function getRankedSharedItems() {
-	const progressions = loadSharedProgressions()
+	const progressions = await loadSharedProgressions()
 	const compositions = await loadSharedCompositions()
+	
+	console.log('[sharedItemsStorage] getRankedSharedItems - loaded:', {
+		progressions: progressions.length,
+		compositions: compositions.length,
+		total: progressions.length + compositions.length
+	})
 	
 	// Sort by favorite count (descending), then by share date (newest first)
 	const rankedProgressions = [...progressions]
@@ -933,6 +1433,12 @@ export async function getRankedSharedItems() {
 			return b.sharedAt - a.sharedAt
 		})
 	
+	console.log('[sharedItemsStorage] getRankedSharedItems - ranked:', {
+		progressions: rankedProgressions.length,
+		compositions: rankedCompositions.length,
+		total: rankedProgressions.length + rankedCompositions.length
+	})
+	
 	return {
 		progressions: rankedProgressions,
 		compositions: rankedCompositions
@@ -946,7 +1452,7 @@ export function deleteSharedItem(itemId: string, itemType: 'progression' | 'comp
 	const currentUserId = getCurrentUserId()
 	
 	if (itemType === 'progression') {
-		const shared = loadSharedProgressions()
+		const shared = loadLocalSharedProgressions()
 		const item = shared.find(s => s.id === itemId)
 		if (!item || item.sharedBy !== currentUserId) return false
 		

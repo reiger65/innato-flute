@@ -19,3 +19,4 @@ vercel --prod --yes
 echo ""
 echo "🎉 Alles klaar!"
 
+

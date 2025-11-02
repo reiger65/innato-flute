@@ -69,3 +69,4 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 **Test het nu en laat weten of het werkt!** 🎯
 
+

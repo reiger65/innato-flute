@@ -87,3 +87,4 @@ De app checkt admin status op basis van:
 2. Refresh de pagina
 3. Check browser console voor errors
 
+

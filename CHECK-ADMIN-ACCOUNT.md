@@ -127,3 +127,4 @@ Dan is het waarschijnlijk:
 
 **De makkelijkste check: Supabase Dashboard → Authentication → Users → zoek `info@stonewhistle.com`** 🎯
 
+

@@ -36,3 +36,4 @@ Het SQL bestand is al geopend. Je hoeft alleen:
 - A) Service role key geven → Volledig automatisch
 - B) Handmatig doen → Veilig, 2 minuten
 
+

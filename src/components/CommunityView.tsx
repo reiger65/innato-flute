@@ -49,11 +49,16 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				if (isIPhone) {
 					setDebugInfo(prev => [...prev, { message: 'iPhone detected - using REST API', timestamp: Date.now() }])
 					console.log('[CommunityView] iPhone detected, checking Supabase config...')
-					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-					console.log('[CommunityView] iPhone Supabase URL:', supabaseUrl ? 'SET' : 'MISSING')
-					console.log('[CommunityView] iPhone Supabase Key:', supabaseKey ? 'SET' : 'MISSING')
-					setDebugInfo(prev => [...prev, { message: `Supabase URL: ${supabaseUrl ? 'SET' : 'MISSING'}`, timestamp: Date.now() }])
+					// Use same fallback logic as sharedItemsStorage.ts
+					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
+					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
+					const urlSource = import.meta.env.VITE_SUPABASE_URL ? 'env' : 'hardcoded'
+					const keySource = import.meta.env.VITE_SUPABASE_ANON_KEY ? 'env' : 'hardcoded'
+					console.log('[CommunityView] iPhone Supabase URL:', supabaseUrl ? 'SET (' + urlSource + ')' : 'MISSING')
+					console.log('[CommunityView] iPhone Supabase Key:', supabaseKey ? 'SET (' + keySource + ')' : 'MISSING')
+					// Always show SET because we have fallback - this is more accurate
+					setDebugInfo(prev => [...prev, { message: `Supabase URL: SET (${urlSource}) - ${supabaseUrl.substring(0, 30)}...`, timestamp: Date.now() }])
+					setDebugInfo(prev => [...prev, { message: `Supabase Key: SET (${keySource})`, timestamp: Date.now() }])
 				}
 				
 				const ranked = await getRankedSharedItems()

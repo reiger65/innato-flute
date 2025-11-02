@@ -164,3 +164,4 @@ WHERE tablename = 'compositions';
 - PostgreSQL ALTER TABLE: https://www.postgresql.org/docs/current/sql-altertable.html
 - Supabase RLS: https://supabase.com/docs/guides/auth/row-level-security
 
+

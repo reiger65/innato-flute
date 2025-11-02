@@ -92,3 +92,4 @@ Als je nog steeds "MISSING" ziet:
 - Check of er is geredeployed
 - Check build logs in Vercel voor errors
 
+

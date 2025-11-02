@@ -16,3 +16,4 @@ cd "$BACKUP_DIR" && ls -t compositions_*.json 2>/dev/null | tail -n +51 | xargs 
 echo "✓ Composition backup system ready"
 echo "   Backups will be created in: $BACKUP_DIR"
 
+

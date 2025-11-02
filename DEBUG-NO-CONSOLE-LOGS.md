@@ -84,3 +84,4 @@ Druk Enter. Wat zie je?
 - [ ] Network tab toont requests
 - [ ] Environment variables zijn getest in console
 
+

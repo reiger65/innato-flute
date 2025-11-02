@@ -33,3 +33,4 @@
 ### ✅ Klaar!
 Je app gebruikt nu Supabase online! 🎉
 
+

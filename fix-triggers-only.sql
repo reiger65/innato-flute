@@ -44,3 +44,4 @@ WHERE trigger_schema = 'public'
   )
 ORDER BY trigger_name;
 
+

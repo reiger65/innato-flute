@@ -102,3 +102,4 @@ Na deze stappen:
 
 **Geef me de Supabase URL en anon key, dan maak ik `.env.local` voor je!**
 
+

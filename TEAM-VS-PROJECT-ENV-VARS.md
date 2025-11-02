@@ -66,3 +66,4 @@ import.meta.env.VITE_SUPABASE_URL
 - Als `undefined` → Nog steeds niet goed
 - Als `"https://gkdzcdzgrlnkufqgfizj.supabase.co"` → Werkt! ✅
 
+

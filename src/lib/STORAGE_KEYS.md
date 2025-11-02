@@ -36,3 +36,4 @@ Dit document beschrijft alle localStorage keys die gebruikt worden in de app om 
 3. **Backward compatible**: Bestaande functionaliteit blijft volledig werken
 4. **Separate namespace**: Community data is volledig gescheiden van persoonlijke data
 
+

@@ -54,3 +54,4 @@ De nieuwe code is mogelijk nog niet gedeployed. Check:
 3. Is deze al "Ready" (groen)?
 4. Zo niet, wacht 1-2 minuten
 
+

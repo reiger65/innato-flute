@@ -78,3 +78,4 @@ De RLS policies staan ook in `SUPABASE_SCHEMA.sql`. Deze zorgen ervoor dat:
 - De `service_role` key **NOOIT** in de frontend plaatsen!
 - `.env.local` staat in `.gitignore` en wordt niet gecommit
 
+

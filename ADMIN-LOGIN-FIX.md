@@ -38,3 +38,4 @@ Log in met:
 
 Je zou nu admin functies moeten zien (zoals "Manage Lessons" button).
 
+

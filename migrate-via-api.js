@@ -56,3 +56,4 @@ if (response.ok) {
   console.log('   https://supabase.com/dashboard/project/gkdzcdzgrlnkufqgfizj/sql/new')
 }
 
+

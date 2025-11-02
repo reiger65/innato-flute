@@ -204,3 +204,4 @@ npm run deploy
 
 **Vanaf nu:** `npm run deploy` = Online! 🚀
 
+

@@ -123,3 +123,4 @@ When moving to database:
 4. **Error handling** - Always handle errors from service calls
 5. **Type safety** - Use TypeScript interfaces consistently
 
+

@@ -41,3 +41,4 @@ echo "   ✅ KLAAR! App gebruikt Supabase!"
 echo "═══════════════════════════════════════"
 echo ""
 
+

@@ -26,3 +26,4 @@ async function createAdminUser() {
 
 createAdminUser()
 
+

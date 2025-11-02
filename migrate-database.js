@@ -129,3 +129,4 @@ console.log('   1. Execute SQL in Supabase Dashboard')
 console.log('   2. Or install Supabase CLI and use: supabase db push')
 console.log('')
 
+

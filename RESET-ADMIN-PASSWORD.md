@@ -43,3 +43,4 @@ Run dit SQL script in Supabase SQL Editor:
    - Browser console voor errors (F12)
    - Of email bevestigd is (zie `fix-admin-account.sql`)
 
+

@@ -353,10 +353,10 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	/**
 	 * Handle share progression
 	 */
-	const handleShareProgression = (progression: SavedProgression) => {
+	const handleShareProgression = async (progression: SavedProgression) => {
 		try {
 			// Check if already shared
-			const sharedProgressions = loadSharedProgressions()
+			const sharedProgressions = await loadSharedProgressions()
 			const alreadyShared = sharedProgressions.some(
 				s => s.originalId === progression.id
 			)
@@ -366,7 +366,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				const existing = sharedProgressions.find(s => s.originalId === progression.id)
 				if (existing) {
 					if (confirm(`"${progression.name}" is already shared. Share this updated version?`)) {
-						saveSharedProgression({
+						await saveSharedProgression({
 							originalId: progression.id,
 							name: progression.name,
 							chordIds: progression.chordIds,
@@ -380,7 +380,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				}
 			} else {
 				// Share for the first time
-				saveSharedProgression({
+				await saveSharedProgression({
 					originalId: progression.id,
 					name: progression.name,
 					chordIds: progression.chordIds,

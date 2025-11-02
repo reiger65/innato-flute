@@ -168,3 +168,4 @@ Supabase is **optioneel** voor:
 
 **Status:** ✅ Code klaar | ⏳ Supabase project nog aanmaken
 
+

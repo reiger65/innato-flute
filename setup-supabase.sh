@@ -142,3 +142,4 @@ echo "2. Controleer de browser console voor errors"
 echo "3. Test login/signup functionaliteit"
 echo ""
 
+

@@ -414,3 +414,4 @@ SELECT * FROM compositions WHERE user_id = 'user-uuid';
 4. **Test altijd fallback** (zonder Supabase)
 5. **Documenteer custom queries** die je vaak gebruikt
 
+

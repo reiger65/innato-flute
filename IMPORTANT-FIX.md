@@ -43,3 +43,4 @@ WHERE email = 'info@stonewhistle.com';
 
 **De fout komt omdat je nog de oude query gebruikt. Gebruik de nieuwe met `raw_user_meta_data`!** 🎯
 
+

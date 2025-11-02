@@ -80,3 +80,4 @@ console.log('KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'MISSING')
 - Als beide `undefined` zijn → env vars zijn niet ingebouwd → redeploy opnieuw
 - Als ze wel zijn → deel de console logs met mij
 
+

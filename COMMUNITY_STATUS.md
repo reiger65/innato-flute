@@ -64,3 +64,4 @@
 3. **Check en verfijn CSS styling** → Consistentie met rest van app
 4. **Test volledige flow** → Favorite progression → verschijnt in Community → andere gebruiker kan favorite → ranking update
 
+

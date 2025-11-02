@@ -138,3 +138,4 @@
    - Test met Supabase door `.env.local` te configureren
    - Production deployment met Supabase
 
+

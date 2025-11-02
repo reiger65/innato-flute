@@ -89,3 +89,4 @@ Na het toevoegen van environment variables:
 
 Als je nog steeds errors ziet, deel de console logs!
 
+

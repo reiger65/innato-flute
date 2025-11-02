@@ -17,3 +17,4 @@ Voer migraties altijd in volgorde uit (001, 002, 003, etc.)
 
 Voor belangrijke migraties, maak een `_rollback.sql` bestand met de reverse operaties.
 
+

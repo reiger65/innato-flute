@@ -93,3 +93,4 @@ Dat is waarom environment variables handmatig moeten - dat kan niet via code! �
 
 Na één keer setup → Alles gaat automatisch! 🎉
 
+

@@ -55,3 +55,4 @@ FROM compositions
 WHERE is_public = TRUE
 LIMIT 5;
 
+
