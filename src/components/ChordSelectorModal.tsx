@@ -106,7 +106,7 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 
 				{/* Instructions */}
 				<div className="chord-selector-description">
-					<p>Click the circle icon on a chord to select it, then click "Save to composer" to add your selected chords.</p>
+					<p>Click the circle icon on a chord to select it, then click "Save to composer" to add your selected chords. You can also click the heart icon to add chords to your favorites.</p>
 				</div>
 
 				{/* Tabs and Search Bar */}
