@@ -7,10 +7,13 @@ import {
 	isSharedItemFavorited,
 	addSharedFavorite,
 	removeSharedFavorite,
-	getLastRestApiError
+	getLastRestApiError,
+	deleteSharedItem,
+	clearLocalSharedItems
 } from '../lib/sharedItemsStorage'
 import { saveProgression } from '../lib/progressionService'
 import { saveComposition } from '../lib/compositionService'
+import { getCurrentUser, isAdmin } from '../lib/authService'
 
 interface CommunityViewProps {
 	fluteType: FluteType
@@ -239,6 +242,50 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 		getRankedSharedItems().then(ranked => setSharedItems(ranked))
 	}
 
+	const handleClearCache = () => {
+		if (window.confirm('Clear cached shared items? This will refresh the list.')) {
+			clearLocalSharedItems()
+			// Reload items
+			setIsLoading(true)
+			getRankedSharedItems().then(ranked => {
+				setSharedItems(ranked)
+				setIsLoading(false)
+			}).catch(err => {
+				console.error('Error reloading:', err)
+				setIsLoading(false)
+			})
+		}
+	}
+
+	const handleDeleteItem = async (itemId: string, itemType: 'progression' | 'composition', itemName: string) => {
+		const currentUser = getCurrentUser()
+		const userIsAdmin = isAdmin(currentUser)
+		
+		if (!userIsAdmin) {
+			alert('Only admins can delete shared items.')
+			return
+		}
+		
+		if (!window.confirm(`Delete "${itemName}"? This will remove it from the community for all users.`)) {
+			return
+		}
+		
+		try {
+			const success = await deleteSharedItem(itemId, itemType, userIsAdmin)
+			if (success) {
+				// Reload items to remove deleted item
+				const ranked = await getRankedSharedItems()
+				setSharedItems(ranked)
+				alert(`"${itemName}" has been deleted.`)
+			} else {
+				alert(`Failed to delete "${itemName}". Check console for details.`)
+			}
+		} catch (error) {
+			console.error('Error deleting item:', error)
+			alert(`Error deleting "${itemName}": ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+	}
+
 	const sortedItems = getSortedItems()
 	
 	// Debug: Log what's happening with filtering
@@ -273,6 +320,23 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 						Logged in: {sharedItems.progressions.length + sharedItems.compositions.length} shared items found
 					</span>
 				)}
+				<button
+					onClick={handleClearCache}
+					title="Clear cached shared items"
+					style={{ 
+						display: 'inline-block',
+						marginTop: 'var(--space-2)',
+						padding: '6px 12px',
+						background: '#f3f4f6',
+						border: '1px solid #d1d5db',
+						borderRadius: '6px',
+						color: '#374151',
+						cursor: 'pointer',
+						fontSize: 'var(--font-size-sm)'
+					}}
+				>
+					🗑️ Clear Cache
+				</button>
 			</div>
 
 			{/* Filters */}
@@ -312,7 +376,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 					</button>
 				</div>
 
-				<div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+				<div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
 					<select
 						className="btn-sm"
 						value={sortMode}
@@ -452,6 +516,8 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 					{sortedItems.map((item) => {
 						const isProgression = 'chordIds' in item
 						const isFavorited = isSharedItemFavorited(item.id, isProgression ? 'progression' : 'composition')
+						const currentUser = getCurrentUser()
+						const userIsAdmin = isAdmin(currentUser)
 
 						return (
 								<div 
@@ -494,23 +560,44 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 											)}
 										</p>
 									</div>
-									<button
-										className={`community-favorite-btn ${isFavorited ? 'is-favorited' : ''} ${!isAuthenticated ? 'disabled' : ''}`}
-										onClick={(e) => {
-											e.stopPropagation()
-											handleToggleFavorite(item.id, isProgression ? 'progression' : 'composition')
-										}}
-										disabled={!isAuthenticated}
-										aria-label={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
-										title={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
-									>
-										<svg viewBox="0 0 24 24" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ flexShrink: 0 }}>
-											<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-										</svg>
-										{item.favoriteCount > 0 && (
-											<span className="community-favorite-count">{item.favoriteCount}</span>
+									<div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+										{userIsAdmin && (
+											<button
+												className="community-favorite-btn"
+												onClick={(e) => {
+													e.stopPropagation()
+													handleDeleteItem(item.id, isProgression ? 'progression' : 'composition', item.name)
+												}}
+												aria-label={`Delete ${item.name}`}
+												title={`Delete ${item.name} (Admin)`}
+												style={{ color: 'rgba(220, 38, 38, 0.8)' }}
+											>
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ flexShrink: 0 }}>
+													<polyline points="3 6 5 6 21 6"></polyline>
+													<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+													<line x1="10" y1="11" x2="10" y2="17"></line>
+													<line x1="14" y1="11" x2="14" y2="17"></line>
+												</svg>
+											</button>
 										)}
-									</button>
+										<button
+											className={`community-favorite-btn ${isFavorited ? 'is-favorited' : ''} ${!isAuthenticated ? 'disabled' : ''}`}
+											onClick={(e) => {
+												e.stopPropagation()
+												handleToggleFavorite(item.id, isProgression ? 'progression' : 'composition')
+											}}
+											disabled={!isAuthenticated}
+											aria-label={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
+											title={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
+										>
+											<svg viewBox="0 0 24 24" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ flexShrink: 0 }}>
+												<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+											</svg>
+											{item.favoriteCount > 0 && (
+												<span className="community-favorite-count">{item.favoriteCount}</span>
+											)}
+										</button>
+									</div>
 								</div>
 
 								{/* Info (no preview cards) */}

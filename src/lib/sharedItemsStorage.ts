@@ -163,6 +163,7 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 			const useRestApi = isIOSDevice || isSafari() || true // Always use REST API for now
 			if (useRestApi) {
 				console.log('[sharedItemsStorage] Using REST API fetch approach for progressions (iOS:', isIOSDevice, ', Safari:', isSafari(), ')')
+				let restApiSucceeded = false
 				try {
 					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
 					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
@@ -175,7 +176,9 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 					})
 					
 					// Use REST API directly - more reliable on Safari
-					const url = `${supabaseUrl}/rest/v1/progressions?select=id,name,chord_ids,created_at,updated_at,user_id,version&is_public=eq.true`
+					// Add cache-busting timestamp to prevent browser caching
+					const cacheBuster = Date.now()
+					const url = `${supabaseUrl}/rest/v1/progressions?select=id,name,chord_ids,created_at,updated_at,user_id,version&is_public=eq.true&_t=${cacheBuster}`
 					
 					console.log('[sharedItemsStorage] Full REST API URL for progressions:', url)
 					
@@ -244,9 +247,19 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 									})
 									const sharedProgressions = transformSupabaseProgressions(sortedData)
 									
+									// Deduplicate by ID before returning
+									const uniqueProgressions = sharedProgressions.filter((p, index, self) => 
+										index === self.findIndex(p2 => p2.id === p.id)
+									)
+									
+									if (sharedProgressions.length !== uniqueProgressions.length) {
+										console.warn('[sharedItemsStorage] Found duplicate progressions in REST API response:', sharedProgressions.length, '->', uniqueProgressions.length)
+									}
+									
 									// Use ONLY Supabase items - don't merge with localStorage
-									console.log('[sharedItemsStorage] ✅ Successfully loaded progressions via REST API:', sharedProgressions.length, 'from Supabase')
-									return sharedProgressions
+									console.log('[sharedItemsStorage] ✅ Successfully loaded progressions via REST API:', uniqueProgressions.length, 'from Supabase')
+									restApiSucceeded = true
+									return uniqueProgressions
 								} else {
 									console.warn('[sharedItemsStorage] Progressions REST API returned empty array (successful but no data)')
 									const errorMsg = 'REST API query succeeded but returned 0 progressions. Will try Supabase client fallback.'
@@ -293,7 +306,14 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 					}
 				}
 				
-				// ALWAYS try Supabase client as fallback (even if REST API failed or returned empty)
+				// Only try Supabase client as fallback if REST API didn't succeed
+				if (restApiSucceeded) {
+					console.log('[sharedItemsStorage] REST API succeeded, skipping Supabase client fallback to prevent duplicates')
+					// This should never be reached because REST API returns above, but just in case
+					return []
+				}
+				
+				// Try Supabase client as fallback (only if REST API failed or returned empty)
 				try {
 					// Check session for debugging
 					let sessionInfo = 'no session'
@@ -353,14 +373,10 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 				// Final fallback to localStorage (only if Supabase completely failed)
 				console.warn('[sharedItemsStorage] ⚠️ Both REST API and Supabase client failed or returned empty')
 				console.warn('[sharedItemsStorage] This should not happen if RLS policies are correct!')
-				console.warn('[sharedItemsStorage] Falling back to localStorage (device-specific, not shared)')
-				const localShared = loadLocalSharedProgressions()
-				console.log('[sharedItemsStorage] Found', localShared.length, 'progressions in localStorage')
-				if (localShared.length > 0) {
-					console.warn('[sharedItemsStorage] ⚠️ Using localStorage items - these are NOT shared across devices!')
-					console.warn('[sharedItemsStorage] ⚠️ Check Supabase query logs above to see why Supabase returned empty')
-				}
-				return localShared
+				console.warn('[sharedItemsStorage] NOT falling back to localStorage - returning empty array to prevent device-specific inconsistencies')
+				// Don't fall back to localStorage - it causes device-specific counts
+				// Return empty array instead
+				return []
 			}
 			
 			// For non-Safari browsers, use retry logic
@@ -426,11 +442,7 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 			// If query returned empty array
 			if (result.data && Array.isArray(result.data) && result.data.length === 0) {
 				console.warn('[sharedItemsStorage] Progressions query succeeded but returned 0 public progressions')
-				const localShared = loadLocalSharedProgressions()
-				if (localShared.length > 0) {
-					console.log('[sharedItemsStorage] Found', localShared.length, 'progressions in localStorage fallback')
-					return localShared
-				}
+				console.warn('[sharedItemsStorage] NOT falling back to localStorage - returning empty array')
 				return []
 			}
 			
@@ -443,17 +455,14 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 				})
 			}
 			
-			// Fallback to localStorage
-			console.log('[sharedItemsStorage] Falling back to localStorage for progressions...')
-			const localShared = loadLocalSharedProgressions()
-			console.log('[sharedItemsStorage] Loaded', localShared.length, 'progressions from localStorage fallback')
-			return localShared
+			// Don't fall back to localStorage - return empty array instead
+			console.warn('[sharedItemsStorage] Progressions query failed or returned empty - NOT using localStorage fallback')
+			return []
 			
 		} catch (error) {
 			console.error('[sharedItemsStorage] Exception loading shared progressions from Supabase:', error)
-			const localShared = loadLocalSharedProgressions()
-			console.log('[sharedItemsStorage] Loaded', localShared.length, 'progressions from localStorage after exception')
-			return localShared
+			console.warn('[sharedItemsStorage] NOT falling back to localStorage after exception')
+			return []
 		}
 	}
 	
@@ -545,6 +554,7 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 	console.log('[sharedItemsStorage] loadSharedCompositions called')
 	console.log('[sharedItemsStorage] isSupabaseConfigured:', isSupabaseConfigured())
 	console.log('[sharedItemsStorage] Browser:', isSafari() ? 'Safari/iOS' : 'Other')
+	console.log('[sharedItemsStorage] Call stack:', new Error().stack?.split('\n').slice(1, 4).join('\n'))
 	clearLastRestApiError() // Clear previous error
 	
 	// Transform function (reusable)
@@ -586,6 +596,7 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			const useRestApi = isIOSDevice || isSafari() || true // Always use REST API for now
 			if (useRestApi) {
 				console.log('[sharedItemsStorage] Using REST API fetch approach (iOS:', isIOSDevice, ', Safari:', isSafari(), ')')
+				let restApiSucceeded = false
 				try {
 					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
 					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
@@ -599,7 +610,9 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					
 					// Use REST API directly - more reliable on Safari
 					// URL encode the filter parameter properly
-					const url = `${supabaseUrl}/rest/v1/compositions?select=id,name,chords,tempo,time_signature,created_at,updated_at,user_id,version&is_public=eq.true`
+					// Add cache-busting timestamp to prevent browser caching
+					const cacheBuster = Date.now()
+					const url = `${supabaseUrl}/rest/v1/compositions?select=id,name,chords,tempo,time_signature,created_at,updated_at,user_id,version&is_public=eq.true&_t=${cacheBuster}`
 					
 					console.log('[sharedItemsStorage] Full REST API URL:', url)
 					
@@ -683,10 +696,20 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 									})
 									const sharedCompositions = transformSupabaseCompositions(sortedData)
 									
+									// Deduplicate by ID before returning
+									const uniqueCompositions = sharedCompositions.filter((c, index, self) => 
+										index === self.findIndex(c2 => c2.id === c.id)
+									)
+									
+									if (sharedCompositions.length !== uniqueCompositions.length) {
+										console.warn('[sharedItemsStorage] Found duplicate compositions in REST API response:', sharedCompositions.length, '->', uniqueCompositions.length)
+									}
+									
 									// Use ONLY Supabase items - don't merge with localStorage
 									// localStorage is device-specific and shouldn't be mixed with shared items
-									console.log('[sharedItemsStorage] ✅ Successfully loaded compositions via REST API:', sharedCompositions.length, 'from Supabase')
-									return sharedCompositions
+									console.log('[sharedItemsStorage] ✅ Successfully loaded compositions via REST API:', uniqueCompositions.length, 'from Supabase')
+									restApiSucceeded = true
+									return uniqueCompositions
 								} else {
 									// Empty array - query succeeded but no results
 									console.warn('[sharedItemsStorage] REST API returned empty array (successful but no data)')
@@ -738,7 +761,14 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					}
 				}
 				
-				// ALWAYS try Supabase client as fallback (even if REST API failed or returned empty)
+				// Only try Supabase client as fallback if REST API didn't succeed
+				if (restApiSucceeded) {
+					console.log('[sharedItemsStorage] REST API succeeded, skipping Supabase client fallback to prevent duplicates')
+					// This should never be reached because REST API returns above, but just in case
+					return []
+				}
+				
+				// Try Supabase client as fallback (only if REST API failed or returned empty)
 				try {
 					// Check session for debugging
 					let sessionInfo = 'no session'
@@ -777,9 +807,18 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 						})
 						const sharedCompositions = transformSupabaseCompositions(sortedData)
 						
+						// Deduplicate by ID
+						const uniqueCompositions = sharedCompositions.filter((c, index, self) => 
+							index === self.findIndex(c2 => c2.id === c.id)
+						)
+						
+						if (sharedCompositions.length !== uniqueCompositions.length) {
+							console.warn('[sharedItemsStorage] Found duplicate compositions in Supabase client fallback:', sharedCompositions.length, '->', uniqueCompositions.length)
+						}
+						
 						// Use ONLY Supabase items - don't merge with localStorage
-						console.log('[sharedItemsStorage] Returning', sharedCompositions.length, 'compositions from Supabase')
-						return sharedCompositions
+						console.log('[sharedItemsStorage] Returning', uniqueCompositions.length, 'compositions from Supabase')
+						return uniqueCompositions
 					} else if (queryResult.error) {
 						console.error('[sharedItemsStorage] Compositions Supabase client error:', queryResult.error)
 						if (!lastRestApiError) {
@@ -798,14 +837,10 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 				// Final fallback to localStorage (only if Supabase completely failed)
 				console.warn('[sharedItemsStorage] ⚠️ Both REST API and Supabase client failed or returned empty')
 				console.warn('[sharedItemsStorage] This should not happen if RLS policies are correct!')
-				console.warn('[sharedItemsStorage] Falling back to localStorage (device-specific, not shared)')
-				const localShared = loadLocalSharedCompositions()
-				console.log('[sharedItemsStorage] Found', localShared.length, 'compositions in localStorage')
-				if (localShared.length > 0) {
-					console.warn('[sharedItemsStorage] ⚠️ Using localStorage items - these are NOT shared across devices!')
-					console.warn('[sharedItemsStorage] ⚠️ Check Supabase query logs above to see why Supabase returned empty')
-				}
-				return localShared
+				console.warn('[sharedItemsStorage] NOT falling back to localStorage - returning empty array to prevent device-specific inconsistencies')
+				// Don't fall back to localStorage - it causes device-specific counts
+				// Return empty array instead
+				return []
 			}
 			
 			// For non-Safari browsers, use retry logic
@@ -866,9 +901,18 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 				
 				const sharedCompositions = transformSupabaseCompositions(sortedData)
 				
+				// Deduplicate by ID
+				const uniqueCompositions = sharedCompositions.filter((c, index, self) => 
+					index === self.findIndex(c2 => c2.id === c.id)
+				)
+				
+				if (sharedCompositions.length !== uniqueCompositions.length) {
+					console.warn('[sharedItemsStorage] Found duplicate compositions in non-Safari query:', sharedCompositions.length, '->', uniqueCompositions.length)
+				}
+				
 				// Use ONLY Supabase items - don't merge with localStorage
-				console.log('[sharedItemsStorage] Returning', sharedCompositions.length, 'compositions from Supabase')
-				return sharedCompositions
+				console.log('[sharedItemsStorage] Returning', uniqueCompositions.length, 'compositions from Supabase')
+				return uniqueCompositions
 			}
 			
 			// If query returned empty array (not an error, just no data)
@@ -877,14 +921,7 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 				console.warn('[sharedItemsStorage] This might mean:')
 				console.warn('[sharedItemsStorage]  1. No compositions are marked as is_public=true')
 				console.warn('[sharedItemsStorage]  2. RLS policy might be blocking access')
-				
-				// Still try localStorage as fallback
-				const localShared = loadLocalSharedCompositions()
-				if (localShared.length > 0) {
-					console.log('[sharedItemsStorage] Found', localShared.length, 'compositions in localStorage fallback')
-					return localShared
-				}
-				
+				console.warn('[sharedItemsStorage] NOT falling back to localStorage - returning empty array')
 				return []
 			}
 			
@@ -906,18 +943,15 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 				}
 			}
 			
-			// Fallback to localStorage
-			console.log('[sharedItemsStorage] Falling back to localStorage...')
-			const localShared = loadLocalSharedCompositions()
-			console.log('[sharedItemsStorage] Loaded', localShared.length, 'compositions from localStorage fallback')
-			return localShared
+			// Don't fall back to localStorage - return empty array instead
+			console.warn('[sharedItemsStorage] Compositions query failed or returned empty - NOT using localStorage fallback')
+			return []
 			
 		} catch (error) {
 			console.error('[sharedItemsStorage] Exception loading shared compositions from Supabase:', error)
 			console.error('[sharedItemsStorage] Error stack:', error instanceof Error ? error.stack : 'N/A')
-			const localShared = loadLocalSharedCompositions()
-			console.log('[sharedItemsStorage] Loaded', localShared.length, 'compositions from localStorage after exception')
-			return localShared
+			console.warn('[sharedItemsStorage] NOT falling back to localStorage after exception')
+			return []
 		}
 	}
 	
@@ -1433,16 +1467,32 @@ export async function getRankedSharedItems() {
 	const progressions = await loadSharedProgressions()
 	const compositions = await loadSharedCompositions()
 	
+	// Deduplicate by ID (in case same item appears multiple times)
+	const uniqueProgressions = progressions.filter((p, index, self) => 
+		index === self.findIndex(p2 => p2.id === p.id)
+	)
+	const uniqueCompositions = compositions.filter((c, index, self) => 
+		index === self.findIndex(c2 => c2.id === c.id)
+	)
+	
+	if (progressions.length !== uniqueProgressions.length) {
+		console.warn('[sharedItemsStorage] Found duplicate progressions:', progressions.length, '->', uniqueProgressions.length)
+	}
+	if (compositions.length !== uniqueCompositions.length) {
+		console.warn('[sharedItemsStorage] Found duplicate compositions:', compositions.length, '->', uniqueCompositions.length)
+		console.warn('[sharedItemsStorage] Duplicate IDs:', compositions.map(c => c.id).filter((id, index, self) => self.indexOf(id) !== index))
+	}
+	
 	console.log('[sharedItemsStorage] getRankedSharedItems - loaded:', {
-		progressions: progressions.length,
-		compositions: compositions.length,
-		total: progressions.length + compositions.length,
+		progressions: uniqueProgressions.length,
+		compositions: uniqueCompositions.length,
+		total: uniqueProgressions.length + uniqueCompositions.length,
 		// Log composition IDs to debug duplicates
-		compositionIds: compositions.map(c => ({ id: c.id, name: c.name }))
+		compositionIds: uniqueCompositions.map(c => ({ id: c.id, name: c.name }))
 	})
 	
 	// Sort by favorite count (descending), then by share date (newest first)
-	const rankedProgressions = [...progressions]
+	const rankedProgressions = [...uniqueProgressions]
 		.filter(p => p.isPublic)
 		.sort((a, b) => {
 			if (b.favoriteCount !== a.favoriteCount) {
@@ -1451,7 +1501,7 @@ export async function getRankedSharedItems() {
 			return b.sharedAt - a.sharedAt
 		})
 	
-	const rankedCompositions = [...compositions]
+	const rankedCompositions = [...uniqueCompositions]
 		.filter(c => c.isPublic)
 		.sort((a, b) => {
 			if (b.favoriteCount !== a.favoriteCount) {
@@ -1473,15 +1523,101 @@ export async function getRankedSharedItems() {
 }
 
 /**
- * Delete shared item (only if user is the creator)
+ * Delete shared item from Supabase (set is_public=false or delete)
+ * Admins can delete any item, regular users can only delete their own items
  */
-export function deleteSharedItem(itemId: string, itemType: 'progression' | 'composition'): boolean {
+export async function deleteSharedItem(itemId: string, itemType: 'progression' | 'composition', isAdmin: boolean = false): Promise<boolean> {
 	const currentUserId = getCurrentUserId()
 	
+	if (!isSupabaseConfigured()) {
+		// Fallback to localStorage deletion
+		return deleteSharedItemLocal(itemId, itemType, currentUserId)
+	}
+	
+	try {
+		const supabase = getSupabaseClient()
+		if (!supabase) {
+			console.warn('[sharedItemsStorage] Supabase client is null, falling back to localStorage')
+			return deleteSharedItemLocal(itemId, itemType, currentUserId)
+		}
+		
+		const tableName = itemType === 'progression' ? 'progressions' : 'compositions'
+		
+		// For admins, delete without user_id check
+		// For regular users, only delete if they own it
+		let query = supabase.from(tableName).delete().eq('id', itemId)
+		
+		if (!isAdmin) {
+			// Regular users can only delete their own items
+			const { data: { session } } = await supabase.auth.getSession()
+			if (!session?.user?.id) {
+				console.error('[sharedItemsStorage] No session found for delete operation')
+				return false
+			}
+			query = query.eq('user_id', session.user.id)
+		}
+		
+		const { error } = await query
+		
+		if (error) {
+			console.error(`[sharedItemsStorage] Error deleting ${itemType} from Supabase:`, error)
+			
+			// Try alternative: set is_public=false instead of deleting
+			console.log(`[sharedItemsStorage] Trying alternative: set is_public=false for ${itemId}`)
+			let updateQuery = supabase.from(tableName).update({ is_public: false }).eq('id', itemId)
+			
+			if (!isAdmin) {
+				const { data: { session } } = await supabase.auth.getSession()
+				if (session?.user?.id) {
+					updateQuery = updateQuery.eq('user_id', session.user.id)
+				}
+			}
+			
+			const { error: updateError } = await updateQuery
+			
+			if (updateError) {
+				console.error(`[sharedItemsStorage] Error setting is_public=false:`, updateError)
+				return false
+			}
+			
+			console.log(`[sharedItemsStorage] Successfully set is_public=false for ${itemId}`)
+			return true
+		}
+		
+		console.log(`[sharedItemsStorage] Successfully deleted ${itemType} ${itemId} from Supabase`)
+		
+		// Also remove from localStorage favorites
+		deleteSharedItemLocal(itemId, itemType, currentUserId)
+		
+		return true
+	} catch (error) {
+		console.error(`[sharedItemsStorage] Exception deleting ${itemType} from Supabase:`, error)
+		return deleteSharedItemLocal(itemId, itemType, currentUserId)
+	}
+}
+
+/**
+ * Clear all localStorage shared items (useful for debugging/cleanup)
+ */
+export function clearLocalSharedItems(): void {
+	try {
+		localStorage.removeItem(STORAGE_KEY_PROGRESSIONS)
+		localStorage.removeItem(STORAGE_KEY_COMPOSITIONS)
+		localStorage.removeItem(STORAGE_KEY_FAVORITES)
+		console.log('[sharedItemsStorage] Cleared all localStorage shared items')
+	} catch (error) {
+		console.error('[sharedItemsStorage] Error clearing localStorage:', error)
+	}
+}
+
+/**
+ * Delete shared item from localStorage (fallback)
+ */
+function deleteSharedItemLocal(itemId: string, itemType: 'progression' | 'composition', currentUserId: string | null): boolean {
 	if (itemType === 'progression') {
 		const shared = loadLocalSharedProgressions()
 		const item = shared.find(s => s.id === itemId)
-		if (!item || item.sharedBy !== currentUserId) return false
+		if (!item || (currentUserId && item.sharedBy !== currentUserId)) return false
 		
 		const filtered = shared.filter(s => s.id !== itemId)
 		localStorage.setItem(STORAGE_KEY_PROGRESSIONS, JSON.stringify(filtered))
@@ -1493,7 +1629,7 @@ export function deleteSharedItem(itemId: string, itemType: 'progression' | 'comp
 	} else {
 		const shared = loadLocalSharedCompositions()
 		const item = shared.find(s => s.id === itemId)
-		if (!item || item.sharedBy !== currentUserId) return false
+		if (!item || (currentUserId && item.sharedBy !== currentUserId)) return false
 		
 		const filtered = shared.filter(s => s.id !== itemId)
 		localStorage.setItem(STORAGE_KEY_COMPOSITIONS, JSON.stringify(filtered))
