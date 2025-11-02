@@ -164,9 +164,40 @@ async function queryWithRetry<T>(
 	return { data: null, error: { message: 'All retry attempts failed', code: 'RETRY_FAILED' } }
 }
 
+// Detect Safari/iOS
+function isSafari(): boolean {
+	if (typeof navigator === 'undefined') return false
+	const ua = navigator.userAgent.toLowerCase()
+	return ua.includes('safari') && !ua.includes('chrome') && !ua.includes('firefox') || ua.includes('iphone') || ua.includes('ipad')
+}
+
 export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 	console.log('[sharedItemsStorage] loadSharedCompositions called')
 	console.log('[sharedItemsStorage] isSupabaseConfigured:', isSupabaseConfigured())
+	console.log('[sharedItemsStorage] Browser:', isSafari() ? 'Safari/iOS' : 'Other')
+	
+	// Transform function (reusable)
+	function transformSupabaseCompositions(items: any[]): SharedComposition[] {
+		return items.map(item => ({
+			id: item.id,
+			originalId: item.id,
+			name: item.name,
+			chords: item.chords as SharedComposition['chords'],
+			tempo: item.tempo,
+			timeSignature: item.time_signature as '3/4' | '4/4',
+			fluteType: 'innato',
+			tuning: '440',
+			sharedBy: item.user_id,
+			sharedByUsername: 'Anonymous',
+			sharedAt: new Date(item.created_at).getTime(),
+			isPublic: true,
+			favoriteCount: 0,
+			isReadOnly: true,
+			createdAt: new Date(item.created_at).getTime(),
+			updatedAt: new Date(item.updated_at).getTime(),
+			version: item.version || 1
+		}))
+	}
 	
 	if (isSupabaseConfigured()) {
 		try {
@@ -178,44 +209,96 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			
 			console.log('[sharedItemsStorage] Loading public compositions from Supabase...')
 			
-			// Transform function (reusable)
-			function transformSupabaseCompositions(items: any[]): SharedComposition[] {
-				return items.map(item => ({
-					id: item.id,
-					originalId: item.id,
-					name: item.name,
-					chords: item.chords as SharedComposition['chords'],
-					tempo: item.tempo,
-					timeSignature: item.time_signature as '3/4' | '4/4',
-					fluteType: 'innato',
-					tuning: '440',
-					sharedBy: item.user_id,
-					sharedByUsername: 'Anonymous',
-					sharedAt: new Date(item.created_at).getTime(),
-					isPublic: true,
-					favoriteCount: 0,
-					isReadOnly: true,
-					createdAt: new Date(item.created_at).getTime(),
-					updatedAt: new Date(item.updated_at).getTime(),
-					version: item.version || 1
-				}))
+			// For Safari, try a simpler direct query first (no retry wrapper)
+			if (isSafari()) {
+				console.log('[sharedItemsStorage] Safari detected - using direct query approach')
+				try {
+					// Direct query with Promise.race for timeout
+					const queryPromise = supabase
+						.from('compositions')
+						.select('id, name, chords, tempo, time_signature, created_at, updated_at, user_id, version')
+						.eq('is_public', true)
+					
+					const timeoutPromise = new Promise<{ data: null, error: any }>((resolve) => {
+						setTimeout(() => {
+							resolve({ data: null, error: { message: 'Safari query timeout', code: 'TIMEOUT' } })
+						}, 5000) // 5 second timeout for Safari
+					})
+					
+					const result = await Promise.race([queryPromise, timeoutPromise]) as any
+					
+					if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+						console.log('[sharedItemsStorage] ✅ Safari direct query succeeded! Loaded', result.data.length, 'compositions')
+						const sortedData = [...result.data].sort((a: any, b: any) => {
+							const dateA = new Date(a.updated_at || a.created_at).getTime()
+							const dateB = new Date(b.updated_at || b.created_at).getTime()
+							return dateB - dateA
+						})
+						const sharedCompositions = transformSupabaseCompositions(sortedData)
+						
+						// Merge with localStorage
+						const localShared = loadLocalSharedCompositions()
+						const supabaseIds = new Set(sharedCompositions.map(c => c.id))
+						const localOnly = localShared.filter(c => !supabaseIds.has(c.id))
+						
+						return [...sharedCompositions, ...localOnly]
+					} else if (result.error) {
+						console.warn('[sharedItemsStorage] Safari query error:', result.error)
+						// Fall through to localStorage
+					} else {
+						console.warn('[sharedItemsStorage] Safari query returned empty')
+						// Fall through to localStorage
+					}
+				} catch (safariErr) {
+					console.error('[sharedItemsStorage] Safari query exception:', safariErr)
+					// Fall through to localStorage
+				}
+				
+				// For Safari, always try localStorage as fallback
+				console.log('[sharedItemsStorage] Safari: Falling back to localStorage')
+				const localShared = loadLocalSharedCompositions()
+				if (localShared.length > 0) {
+					console.log('[sharedItemsStorage] Safari: Found', localShared.length, 'items in localStorage')
+					return localShared
+				}
+				return []
 			}
 			
-			// Strategy 1: Query with retry and timeout (Safari-compatible)
-			console.log('[sharedItemsStorage] Attempting query with retry logic...')
+			// For non-Safari browsers, use retry logic
+			// Check if we have a session (for debugging)
+			let hasSession = false
+			try {
+				const { data: sessionData } = await supabase.auth.getSession()
+				hasSession = !!sessionData?.session
+				console.log('[sharedItemsStorage] Session check:', hasSession ? 'authenticated' : 'anonymous')
+			} catch (sessionErr) {
+				console.warn('[sharedItemsStorage] Could not check session:', sessionErr)
+			}
+			
+			// Strategy 1: Query with retry and timeout (non-Safari)
+			console.log('[sharedItemsStorage] Attempting query with retry logic (anonymous access allowed)...')
 			const result = await queryWithRetry(
 				async () => {
 					try {
 						const queryResult = await supabase
 							.from('compositions')
-							.select('*')
+							.select('id, name, chords, tempo, time_signature, created_at, updated_at, user_id, version')
 							.eq('is_public', true)
+						
+						console.log('[sharedItemsStorage] Query result:', {
+							hasData: !!queryResult.data,
+							dataLength: queryResult.data?.length || 0,
+							hasError: !!queryResult.error,
+							errorCode: queryResult.error?.code,
+							errorMessage: queryResult.error?.message
+						})
 						
 						return {
 							data: queryResult.data || [],
 							error: queryResult.error
 						}
 					} catch (err) {
+						console.error('[sharedItemsStorage] Query exception:', err)
 						return {
 							data: null,
 							error: err
@@ -223,7 +306,7 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					}
 				},
 				3, // 3 retries
-				8000 // 8 second timeout
+				10000 // 10 second timeout
 			)
 			
 			// If we got data, use it
@@ -272,8 +355,16 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					code: result.error.code,
 					message: result.error.message,
 					hint: result.error.hint,
-					details: result.error.details
+					details: result.error.details,
+					hasSession,
+					userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
 				})
+				
+				// If it's an RLS error, provide specific guidance
+				if (result.error.code === '42501' || result.error.message?.includes('permission') || result.error.message?.includes('policy')) {
+					console.error('[sharedItemsStorage] ⚠️ RLS Policy Error - This might be a Safari-specific issue')
+					console.error('[sharedItemsStorage] Try: Check RLS policies allow anonymous SELECT on is_public=true')
+				}
 			}
 			
 			// Fallback to localStorage

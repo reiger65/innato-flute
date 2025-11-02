@@ -33,6 +33,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 	const [selectedItem, setSelectedItem] = useState<SharedProgression | SharedComposition | null>(null)
 	const [loadingError, setLoadingError] = useState<string | null>(null)
 	const [isLoading, setIsLoading] = useState(true)
+	const [debugInfo, setDebugInfo] = useState<{ message: string, timestamp: number }[]>([])
 
 	// Load shared items
 	useEffect(() => {
@@ -40,27 +41,35 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 			try {
 				setIsLoading(true)
 				setLoadingError(null)
+				setDebugInfo(prev => [...prev, { message: 'Starting to load items...', timestamp: Date.now() }])
+				
 				const ranked = await getRankedSharedItems()
 				setSharedItems(ranked)
 				
 				// Log for debugging (visible in UI too)
 				const total = ranked.progressions.length + ranked.compositions.length
+				const debugMsg = `Loaded: ${ranked.progressions.length} progressions, ${ranked.compositions.length} compositions (total: ${total})`
 				console.log('[CommunityView] Loaded items:', {
 					progressions: ranked.progressions.length,
 					compositions: ranked.compositions.length,
 					total
 				})
+				setDebugInfo(prev => [...prev, { message: debugMsg, timestamp: Date.now() }])
 				
 				// Only show error if NO items were loaded at all
 				// If items exist but are filtered out, don't show error
 				if (total === 0) {
 					setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
+					setDebugInfo(prev => [...prev, { message: '⚠️ No items found after loading', timestamp: Date.now() }])
 				} else {
 					setLoadingError(null) // Clear error if items found (even if filtered out)
+					setDebugInfo(prev => [...prev, { message: '✅ Items loaded successfully', timestamp: Date.now() }])
 				}
 			} catch (error) {
 				console.error('Error loading shared items:', error)
+				const errorMsg = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
 				setLoadingError(`Error loading shared items: ${error instanceof Error ? error.message : 'Unknown error'}`)
+				setDebugInfo(prev => [...prev, { message: `❌ ${errorMsg}`, timestamp: Date.now() }])
 			} finally {
 				setIsLoading(false)
 			}
@@ -323,6 +332,15 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 			{isLoading && (
 				<div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'rgba(0, 0, 0, 0.6)' }}>
 					<p>Loading shared items...</p>
+					{debugInfo.length > 0 && (
+						<div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-xs)', textAlign: 'left', maxWidth: '400px', margin: 'var(--space-2) auto 0' }}>
+							{debugInfo.slice(-3).map((info, i) => (
+								<div key={i} style={{ marginBottom: '4px', opacity: 0.7 }}>
+									{info.message}
+								</div>
+							))}
+						</div>
+					)}
 				</div>
 			)}
 			
