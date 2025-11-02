@@ -291,14 +291,26 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					})
 					
 					const startTime = Date.now()
-					const response = await Promise.race([fetchPromise, timeoutPromise])
+					let response: Response
+					try {
+						response = await Promise.race([fetchPromise, timeoutPromise])
+					} catch (fetchError) {
+						console.error('[sharedItemsStorage] Fetch promise rejected:', fetchError)
+						if (fetchError instanceof Error) {
+							const errorMsg = `Fetch failed: ${fetchError.message}`
+							lastRestApiError = errorMsg
+							console.error('[sharedItemsStorage]', errorMsg)
+						}
+						throw fetchError
+					}
 					const duration = Date.now() - startTime
 					
-					console.log('[sharedItemsStorage] Safari REST API response:', {
+					console.log('[sharedItemsStorage] REST API response:', {
 						status: response.status,
 						statusText: response.statusText,
 						ok: response.ok,
-						duration: `${duration}ms`
+						duration: `${duration}ms`,
+						headers: Object.fromEntries(response.headers.entries())
 					})
 					
 					if (response.ok && response.status !== 408) {
