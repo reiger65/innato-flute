@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear localStorage Shared Items</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button.danger {
+            background: #dc2626;
+        }
+        button.danger:hover {
+            background: #b91c1c;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .result.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        .result.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .info {
+            background: #eff6ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            color: #1e40af;
+        }
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Clear localStorage Shared Items</h1>
+        
+        <div class="info">
+            <strong>What this does:</strong><br>
+            Clears shared items stored in localStorage that are causing inconsistent counts across devices.
+            Your own compositions and progressions will NOT be affected.
+        </div>
+
+        <button onclick="clearSharedItems()">Clear Shared Items</button>
+        <button onclick="showCurrentStorage()" style="background: #6b7280;">Show Current Storage</button>
+        <button onclick="clearAll()" class="danger">Clear ALL localStorage (⚠️ destructive)</button>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        function clearSharedItems() {
+            try {
+                const keys = [
+                    'innato-shared-progressions',
+                    'innato-shared-compositions',
+                    'innato-shared-favorites'
+                ];
+
+                let cleared = [];
+                keys.forEach(key => {
+                    const value = localStorage.getItem(key);
+                    if (value) {
+                        localStorage.removeItem(key);
+                        cleared.push(key);
+                    }
+                });
+
+                if (cleared.length > 0) {
+                    showResult(`✅ Cleared ${cleared.length} localStorage keys:<br>${cleared.map(k => `<code>${k}</code>`).join('<br>')}<br><br>Now reload the INNATO app to see the changes.`, 'success');
+                } else {
+                    showResult('ℹ️ No shared items found in localStorage. Nothing to clear.', 'success');
+                }
+            } catch (error) {
+                showResult(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function showCurrentStorage() {
+            try {
+                const keys = [
+                    'innato-shared-progressions',
+                    'innato-shared-compositions',
+                    'innato-shared-favorites'
+                ];
+
+                let info = [];
+                keys.forEach(key => {
+                    const value = localStorage.getItem(key);
+                    if (value) {
+                        try {
+                            const parsed = JSON.parse(value);
+                            const count = Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length;
+                            info.push(`<code>${key}</code>: ${count} items`);
+                        } catch {
+                            info.push(`<code>${key}</code>: exists (not JSON)`);
+                        }
+                    } else {
+                        info.push(`<code>${key}</code>: empty`);
+                    }
+                });
+
+                if (info.length > 0) {
+                    showResult(`Current localStorage:<br>${info.join('<br>')}`, 'success');
+                } else {
+                    showResult('No shared items in localStorage.', 'success');
+                }
+            } catch (error) {
+                showResult(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function clearAll() {
+            if (confirm('⚠️ WARNING: This will clear ALL localStorage data, including your own compositions and progressions!\n\nAre you sure?')) {
+                try {
+                    localStorage.clear();
+                    showResult('✅ All localStorage cleared. Reload the INNATO app.', 'success');
+                } catch (error) {
+                    showResult(`❌ Error: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        function showResult(message, type) {
+            const result = document.getElementById('result');
+            result.className = 'result ' + type;
+            result.innerHTML = message;
+            result.style.display = 'block';
+        }
+
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            showCurrentStorage();
+        });
+    </script>
+</body>
+</html>
+
