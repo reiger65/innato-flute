@@ -8,8 +8,7 @@ import {
 	addSharedFavorite,
 	removeSharedFavorite,
 	getLastRestApiError,
-	deleteSharedItem,
-	clearLocalSharedItems
+	deleteSharedItem
 } from '../lib/sharedItemsStorage'
 import { saveProgression } from '../lib/progressionService'
 import { saveComposition } from '../lib/compositionService'
@@ -37,89 +36,41 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 	const [selectedItem, setSelectedItem] = useState<SharedProgression | SharedComposition | null>(null)
 	const [loadingError, setLoadingError] = useState<string | null>(null)
 	const [isLoading, setIsLoading] = useState(true)
-	const [debugInfo, setDebugInfo] = useState<{ message: string, timestamp: number }[]>([])
 
-	// Load shared items
+	// Load shared items when component mounts (only once when tab is opened)
 	useEffect(() => {
 		const loadItems = async () => {
 			try {
 				setIsLoading(true)
 				setLoadingError(null)
-				setDebugInfo(prev => [...prev, { message: 'Starting to load items...', timestamp: Date.now() }])
-				
-				// Add more detailed logging for iPhone
-				const isIPhone = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
-				if (isIPhone) {
-					setDebugInfo(prev => [...prev, { message: 'iPhone detected - using REST API', timestamp: Date.now() }])
-					console.log('[CommunityView] iPhone detected, checking Supabase config...')
-					// Use same fallback logic as sharedItemsStorage.ts
-					const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
-					const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
-					const urlSource = import.meta.env.VITE_SUPABASE_URL ? 'env' : 'hardcoded'
-					const keySource = import.meta.env.VITE_SUPABASE_ANON_KEY ? 'env' : 'hardcoded'
-					console.log('[CommunityView] iPhone Supabase URL:', supabaseUrl ? 'SET (' + urlSource + ')' : 'MISSING')
-					console.log('[CommunityView] iPhone Supabase Key:', supabaseKey ? 'SET (' + keySource + ')' : 'MISSING')
-					// Always show SET because we have fallback - this is more accurate
-					setDebugInfo(prev => [...prev, { message: `Supabase URL: SET (${urlSource}) - ${supabaseUrl.substring(0, 30)}...`, timestamp: Date.now() }])
-					setDebugInfo(prev => [...prev, { message: `Supabase Key: SET (${keySource})`, timestamp: Date.now() }])
-				}
 				
 				const ranked = await getRankedSharedItems()
 				setSharedItems(ranked)
 				
-				// Log for debugging (visible in UI too)
 				const total = ranked.progressions.length + ranked.compositions.length
-				const debugMsg = `Loaded: ${ranked.progressions.length} progressions, ${ranked.compositions.length} compositions (total: ${total})`
-				console.log('[CommunityView] Loaded items:', {
-					progressions: ranked.progressions.length,
-					compositions: ranked.compositions.length,
-					total
-				})
-				setDebugInfo(prev => [...prev, { message: debugMsg, timestamp: Date.now() }])
 				
 				// Check for REST API errors
 				const restApiError = getLastRestApiError()
-				if (restApiError) {
-					setDebugInfo(prev => [...prev, { message: `🔴 REST API Error: ${restApiError}`, timestamp: Date.now() }])
-				}
 				
 				// Only show error if NO items were loaded at all
-				// If items exist but are filtered out, don't show error
 				if (total === 0) {
 					let errorMsg = 'No shared items found. Make sure compositions are shared and marked as public in Supabase.'
 					if (restApiError) {
 						errorMsg = `REST API Error: ${restApiError}`
 					}
 					setLoadingError(errorMsg)
-					setDebugInfo(prev => [...prev, { message: '⚠️ No items found after loading', timestamp: Date.now() }])
-					if (isIPhone) {
-						setDebugInfo(prev => [...prev, { message: 'iPhone detected - REST API query failed', timestamp: Date.now() }])
-					}
 				} else {
-					setLoadingError(null) // Clear error if items found (even if filtered out)
-					setDebugInfo(prev => [...prev, { message: '✅ Items loaded successfully', timestamp: Date.now() }])
+					setLoadingError(null)
 				}
 			} catch (error) {
 				console.error('Error loading shared items:', error)
-				const errorMsg = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
 				setLoadingError(`Error loading shared items: ${error instanceof Error ? error.message : 'Unknown error'}`)
-				setDebugInfo(prev => [...prev, { message: `❌ ${errorMsg}`, timestamp: Date.now() }])
-				if (error instanceof Error) {
-					console.error('[CommunityView] Error stack:', error.stack || 'No stack trace')
-					const stackTrace = error.stack
-					if (stackTrace) {
-						setDebugInfo(prev => [...prev, { message: `Stack: ${stackTrace.substring(0, 100)}...`, timestamp: Date.now() }])
-					}
-				}
 			} finally {
 				setIsLoading(false)
 			}
 		}
 
 		loadItems()
-		// Refresh every 10 seconds (reduced from 5 to avoid too many requests)
-		const interval = setInterval(loadItems, 10000)
-		return () => clearInterval(interval)
 	}, [])
 
 	// Check online/offline status
@@ -242,21 +193,6 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 		getRankedSharedItems().then(ranked => setSharedItems(ranked))
 	}
 
-	const handleClearCache = () => {
-		if (window.confirm('Clear cached shared items? This will refresh the list.')) {
-			clearLocalSharedItems()
-			// Reload items
-			setIsLoading(true)
-			getRankedSharedItems().then(ranked => {
-				setSharedItems(ranked)
-				setIsLoading(false)
-			}).catch(err => {
-				console.error('Error reloading:', err)
-				setIsLoading(false)
-			})
-		}
-	}
-
 	const handleDeleteItem = async (itemId: string, itemType: 'progression' | 'composition', itemName: string) => {
 		const currentUser = getCurrentUser()
 		const userIsAdmin = isAdmin(currentUser)
@@ -320,23 +256,6 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 						Logged in: {sharedItems.progressions.length + sharedItems.compositions.length} shared items found
 					</span>
 				)}
-				<button
-					onClick={handleClearCache}
-					title="Clear cached shared items"
-					style={{ 
-						display: 'inline-block',
-						marginTop: 'var(--space-2)',
-						padding: '6px 12px',
-						background: '#f3f4f6',
-						border: '1px solid #d1d5db',
-						borderRadius: '6px',
-						color: '#374151',
-						cursor: 'pointer',
-						fontSize: 'var(--font-size-sm)'
-					}}
-				>
-					🗑️ Clear Cache
-				</button>
 			</div>
 
 			{/* Filters */}
@@ -407,15 +326,6 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 			{isLoading && (
 				<div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'rgba(0, 0, 0, 0.6)' }}>
 					<p>Loading shared items...</p>
-					{debugInfo.length > 0 && (
-						<div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-xs)', textAlign: 'left', maxWidth: '400px', margin: 'var(--space-2) auto 0' }}>
-							{debugInfo.slice(-3).map((info, i) => (
-								<div key={i} style={{ marginBottom: '4px', opacity: 0.7 }}>
-									{info.message}
-								</div>
-							))}
-						</div>
-					)}
 				</div>
 			)}
 			
@@ -432,46 +342,26 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 					<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
 						⚠️ {loadingError}
 					</p>
-					<p style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)', color: 'rgba(0, 0, 0, 0.6)' }}>
-						{typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent) ? (
-							<>iPhone detected. Checking console logs for REST API errors. This might be a Safari-specific issue with Supabase queries.</>
-						) : (
-							<>This might be a network issue. The app will retry automatically. Check your internet connection and try again.</>
-						)}
-					</p>
-					{debugInfo.length > 0 && (
-						<div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-xs)', textAlign: 'left', background: 'rgba(0, 0, 0, 0.05)', padding: 'var(--space-2)', borderRadius: 'var(--radius-1)', maxHeight: '200px', overflow: 'auto' }}>
-							<strong>Debug Info:</strong>
-							{debugInfo.slice(-5).map((info, i) => (
-								<div key={i} style={{ marginTop: '4px', fontFamily: 'monospace' }}>
-									{info.message}
-								</div>
-							))}
-						</div>
-					)}
 					<button 
 						className="btn-sm"
-						onClick={() => {
+						onClick={async () => {
 							setIsLoading(true)
 							setLoadingError(null)
-							setDebugInfo([])
-							getRankedSharedItems()
-								.then(ranked => {
-									setSharedItems(ranked)
-									const total = ranked.progressions.length + ranked.compositions.length
-									console.log('[CommunityView] Retry loaded:', total, 'items')
-									if (total === 0) {
-										setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
-									} else {
-										setLoadingError(null)
-									}
-									setIsLoading(false)
-								})
-								.catch(err => {
-									console.error('[CommunityView] Retry error:', err)
-									setLoadingError(`Error: ${err instanceof Error ? err.message : 'Failed to load'}`)
-									setIsLoading(false)
-								})
+							try {
+								const ranked = await getRankedSharedItems()
+								setSharedItems(ranked)
+								const total = ranked.progressions.length + ranked.compositions.length
+								if (total === 0) {
+									setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
+								} else {
+									setLoadingError(null)
+								}
+							} catch (err) {
+								console.error('[CommunityView] Retry error:', err)
+								setLoadingError(`Error: ${err instanceof Error ? err.message : 'Failed to load'}`)
+							} finally {
+								setIsLoading(false)
+							}
 						}}
 					>
 						Retry Now
