@@ -14,8 +14,9 @@ let supabaseClient: SupabaseClient | null = null
  */
 function initSupabaseClient(): SupabaseClient | null {
 	// Check if Supabase credentials are configured
-	const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-	const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+	// TEMPORARY FIX: Hardcode for testing (remove after env vars work)
+	const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gkdzcdzgrlnkufqgfizj.supabase.co'
+	const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZHpjZHpncmxua3VmcWdmaXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNzUyNTMsImV4cCI6MjA3NzY1MTI1M30.6tc8sr8lpTnXX3HLntWyrnqd8f_8XKeP-aP3lhkAciA'
 
 	// Always log - even in production
 	const logInfo = {
@@ -23,7 +24,8 @@ function initSupabaseClient(): SupabaseClient | null {
 		hasKey: !!supabaseAnonKey,
 		urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'none',
 		urlValue: supabaseUrl || 'UNDEFINED',
-		keyPreview: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'UNDEFINED'
+		keyPreview: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'UNDEFINED',
+		source: import.meta.env.VITE_SUPABASE_URL ? 'env' : 'hardcoded'
 	}
 	
 	// Use alert in production if not configured (for debugging)
