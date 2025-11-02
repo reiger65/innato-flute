@@ -71,8 +71,13 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 
 	const handleSignIn = async (e: React.FormEvent) => {
 		e.preventDefault()
-		// Always log - even in production
+		
+		// FORCE LOG - multiple methods to ensure visibility
 		console.log('🔐🔐🔐 LOGIN ATTEMPT STARTED 🔐🔐🔐')
+		console.error('LOGIN STARTED - CHECK THIS!')
+		console.warn('LOGIN FUNCTION CALLED')
+		alert('Login attempt started - check console for details') // Temporary - remove later
+		
 		console.log('   Email:', email)
 		console.log('   Has password:', !!password)
 		setError('')
@@ -86,12 +91,24 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		}
 
 		console.log('📤 Calling signIn function...')
+		console.error('CALLING SIGNIN FUNCTION')
+		
+		// Check environment before calling
+		const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+		const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+		console.error('ENV CHECK:', {
+			url: supabaseUrl || 'MISSING',
+			key: supabaseKey ? 'SET' : 'MISSING'
+		})
+		
 		try {
 			const result = await signIn(email, password)
+			console.error('SIGNIN RESULT:', result)
 			console.log('📥 SignIn result:', result)
 			setLoading(false)
 
 			if (result.success && result.user) {
+				console.error('✅ LOGIN SUCCESSFUL')
 				console.log('✅✅✅ LOGIN SUCCESSFUL ✅✅✅')
 				console.log('   User:', result.user)
 				setCurrentUser(result.user)
@@ -99,6 +116,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 				setEmail('')
 				setPassword('')
 			} else {
+				console.error('❌ LOGIN FAILED:', result.error)
 				console.error('❌❌❌ LOGIN FAILED ❌❌❌')
 				console.error('   Error:', result.error)
 				setError(result.error || 'Invalid email or password')
@@ -106,6 +124,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		} catch (error) {
 			console.error('💥💥💥 EXCEPTION DURING LOGIN 💥💥💥')
 			console.error('   Error:', error)
+			console.error('EXCEPTION:', error)
 			setLoading(false)
 			setError('An error occurred during login. Please check the console.')
 		}

@@ -197,7 +197,8 @@ export default function App() {
 		loadLessons()
 		
 		// Reload lessons periodically to catch localStorage changes
-		const interval = setInterval(loadLessons, 1000)
+		// Increased to 5 seconds to prevent infinite loops
+		const interval = setInterval(loadLessons, 5000)
 		
 		return () => clearInterval(interval)
 	}, [loadLessons])
