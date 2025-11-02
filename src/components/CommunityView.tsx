@@ -6,7 +6,8 @@ import {
 	getRankedSharedItems,
 	isSharedItemFavorited,
 	addSharedFavorite,
-	removeSharedFavorite
+	removeSharedFavorite,
+	getLastRestApiError
 } from '../lib/sharedItemsStorage'
 import { saveProgression } from '../lib/progressionService'
 import { saveComposition } from '../lib/compositionService'
@@ -68,14 +69,23 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				})
 				setDebugInfo(prev => [...prev, { message: debugMsg, timestamp: Date.now() }])
 				
+				// Check for REST API errors
+				const restApiError = getLastRestApiError()
+				if (restApiError) {
+					setDebugInfo(prev => [...prev, { message: `🔴 REST API Error: ${restApiError}`, timestamp: Date.now() }])
+				}
+				
 				// Only show error if NO items were loaded at all
 				// If items exist but are filtered out, don't show error
 				if (total === 0) {
-					const errorMsg = 'No shared items found. Make sure compositions are shared and marked as public in Supabase.'
+					let errorMsg = 'No shared items found. Make sure compositions are shared and marked as public in Supabase.'
+					if (restApiError) {
+						errorMsg = `REST API Error: ${restApiError}`
+					}
 					setLoadingError(errorMsg)
 					setDebugInfo(prev => [...prev, { message: '⚠️ No items found after loading', timestamp: Date.now() }])
 					if (isIPhone) {
-						setDebugInfo(prev => [...prev, { message: 'Check console for REST API errors', timestamp: Date.now() }])
+						setDebugInfo(prev => [...prev, { message: 'iPhone detected - REST API query failed', timestamp: Date.now() }])
 					}
 				} else {
 					setLoadingError(null) // Clear error if items found (even if filtered out)

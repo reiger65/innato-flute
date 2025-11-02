@@ -182,10 +182,22 @@ function isSafari(): boolean {
 	return false
 }
 
+// Global error collector for UI display
+let lastRestApiError: string | null = null
+
+export function getLastRestApiError(): string | null {
+	return lastRestApiError
+}
+
+export function clearLastRestApiError(): void {
+	lastRestApiError = null
+}
+
 export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 	console.log('[sharedItemsStorage] loadSharedCompositions called')
 	console.log('[sharedItemsStorage] isSupabaseConfigured:', isSupabaseConfigured())
 	console.log('[sharedItemsStorage] Browser:', isSafari() ? 'Safari/iOS' : 'Other')
+	clearLastRestApiError() // Clear previous error
 	
 	// Transform function (reusable)
 	function transformSupabaseCompositions(items: any[]): SharedComposition[] {
@@ -306,14 +318,18 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 								body: errorText.substring(0, 500)
 							}
 							console.error('[sharedItemsStorage] REST API error response:', errorDetails)
+							const errorMsg = `REST API ${response.status}: ${response.statusText} - ${errorText.substring(0, 200)}`
+							lastRestApiError = errorMsg
 							// Throw error so outer catch can handle it
-							throw new Error(`REST API failed: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`)
+							throw new Error(errorMsg)
 						} catch (textErr) {
-							if (textErr instanceof Error && textErr.message.includes('REST API failed')) {
+							if (textErr instanceof Error && textErr.message.includes('REST API')) {
 								throw textErr // Re-throw our error
 							}
 							console.error('[sharedItemsStorage] REST API error (could not read body):', response.status, response.statusText)
-							throw new Error(`REST API failed: ${response.status} ${response.statusText}`)
+							const errorMsg = `REST API ${response.status}: ${response.statusText}`
+							lastRestApiError = errorMsg
+							throw new Error(errorMsg)
 						}
 					}
 				} catch (restApiErr) {
@@ -321,6 +337,9 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 					if (restApiErr instanceof Error) {
 						console.error('[sharedItemsStorage] Error message:', restApiErr.message)
 						console.error('[sharedItemsStorage] Error stack:', restApiErr.stack)
+						if (!lastRestApiError) {
+							lastRestApiError = restApiErr.message
+						}
 					}
 					// Don't silently fall through - log and continue to fallback
 				}
