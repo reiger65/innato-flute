@@ -20,7 +20,77 @@ import {
 } from './compositionStorage'
 
 /**
+ * Sync local compositions to Supabase (migrates localStorage → Supabase)
+ */
+export async function syncLocalCompositionsToSupabase(): Promise<number> {
+	if (!isSupabaseConfigured()) return 0
+	
+	try {
+		const supabase = getSupabaseClient()
+		if (!supabase) return 0
+		
+		const { data: { session } } = await supabase.auth.getSession()
+		if (!session?.user?.id) return 0
+		
+		// Get all local compositions
+		const localCompositions = loadLocal()
+		if (localCompositions.length === 0) return 0
+		
+		// Get existing Supabase compositions (to avoid duplicates)
+		const { data: existingData } = await supabase
+			.from('compositions')
+			.select('name, chords, tempo, time_signature')
+			.eq('user_id', session.user.id)
+		
+		const existing = new Set(
+			(existingData || []).map(c => JSON.stringify({
+				name: c.name,
+				chords: c.chords,
+				tempo: c.tempo,
+				time_signature: c.time_signature
+			}))
+		)
+		
+		// Upload local compositions that don't exist in Supabase
+		let syncedCount = 0
+		for (const local of localCompositions) {
+			const key = JSON.stringify({
+				name: local.name,
+				chords: local.chords,
+				tempo: local.tempo,
+				time_signature: local.timeSignature
+			})
+			
+			if (!existing.has(key)) {
+				await supabase
+					.from('compositions')
+					.insert({
+						user_id: session.user.id,
+						name: local.name,
+						chords: local.chords,
+						tempo: local.tempo,
+						time_signature: local.timeSignature,
+						is_public: false,
+						version: 1
+					})
+				syncedCount++
+			}
+		}
+		
+		if (syncedCount > 0) {
+			console.log(`[compositionService] Synced ${syncedCount} local compositions to Supabase`)
+		}
+		
+		return syncedCount
+	} catch (error) {
+		console.error('[compositionService] Error syncing to Supabase:', error)
+		return 0
+	}
+}
+
+/**
  * Load all compositions from Supabase or localStorage
+ * If logged in, syncs local compositions to Supabase first, then loads from Supabase
  */
 export async function loadCompositions(): Promise<SavedComposition[]> {
 	if (isSupabaseConfigured()) {
@@ -34,6 +104,13 @@ export async function loadCompositions(): Promise<SavedComposition[]> {
 			// Get user ID from Supabase session
 			const { data: { session } } = await supabase.auth.getSession()
 			if (!session?.user?.id) return loadLocal()
+			
+			// Sync local compositions to Supabase (only once per session)
+			const syncKey = `composition-sync-${session.user.id}`
+			if (!sessionStorage.getItem(syncKey)) {
+				await syncLocalCompositionsToSupabase()
+				sessionStorage.setItem(syncKey, 'true')
+			}
 			
 			const { data, error } = await supabase
 				.from('compositions')

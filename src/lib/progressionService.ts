@@ -19,7 +19,71 @@ import {
 } from './progressionStorage'
 
 /**
+ * Sync local progressions to Supabase (migrates localStorage → Supabase)
+ */
+export async function syncLocalProgressionsToSupabase(): Promise<number> {
+	if (!isSupabaseConfigured()) return 0
+	
+	try {
+		const supabase = getSupabaseClient()
+		if (!supabase) return 0
+		
+		const { data: { session } } = await supabase.auth.getSession()
+		if (!session?.user?.id) return 0
+		
+		// Get all local progressions
+		const localProgressions = loadLocal()
+		if (localProgressions.length === 0) return 0
+		
+		// Get existing Supabase progressions (to avoid duplicates)
+		const { data: existingData } = await supabase
+			.from('progressions')
+			.select('name, chord_ids')
+			.eq('user_id', session.user.id)
+		
+		const existing = new Set(
+			(existingData || []).map(p => JSON.stringify({
+				name: p.name,
+				chord_ids: p.chord_ids
+			}))
+		)
+		
+		// Upload local progressions that don't exist in Supabase
+		let syncedCount = 0
+		for (const local of localProgressions) {
+			const key = JSON.stringify({
+				name: local.name,
+				chord_ids: local.chordIds
+			})
+			
+			if (!existing.has(key)) {
+				await supabase
+					.from('progressions')
+					.insert({
+						user_id: session.user.id,
+						name: local.name,
+						chord_ids: local.chordIds,
+						is_public: false,
+						version: 1
+					})
+				syncedCount++
+			}
+		}
+		
+		if (syncedCount > 0) {
+			console.log(`[progressionService] Synced ${syncedCount} local progressions to Supabase`)
+		}
+		
+		return syncedCount
+	} catch (error) {
+		console.error('[progressionService] Error syncing to Supabase:', error)
+		return 0
+	}
+}
+
+/**
  * Load all progressions from Supabase or localStorage
+ * If logged in, syncs local progressions to Supabase first, then loads from Supabase
  */
 export async function loadProgressions(): Promise<SavedProgression[]> {
 	if (isSupabaseConfigured()) {
@@ -32,6 +96,13 @@ export async function loadProgressions(): Promise<SavedProgression[]> {
 			
 			const { data: { session } } = await supabase.auth.getSession()
 			if (!session?.user?.id) return loadLocal()
+			
+			// Sync local progressions to Supabase (only once per session)
+			const syncKey = `progression-sync-${session.user.id}`
+			if (!sessionStorage.getItem(syncKey)) {
+				await syncLocalProgressionsToSupabase()
+				sessionStorage.setItem(syncKey, 'true')
+			}
 			
 			const { data, error } = await supabase
 				.from('progressions')
