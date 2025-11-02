@@ -138,41 +138,83 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 			}
 			
 			console.log('[sharedItemsStorage] Loading public compositions from Supabase...')
+			
+			// Check session status
+			const { data: sessionData } = await supabase.auth.getSession()
+			console.log('[sharedItemsStorage] Session status:', sessionData?.session ? 'authenticated' : 'anonymous')
+			
 			// Load public compositions from Supabase
-			const { data, error } = await supabase
+			// This should work even without authentication due to RLS policy
+			const { data, error, count } = await supabase
 				.from('compositions')
-				.select('*')
+				.select('*', { count: 'exact' })
 				.eq('is_public', true)
 				.order('updated_at', { ascending: false })
 			
+			console.log('[sharedItemsStorage] Query result:', {
+				hasData: !!data,
+				dataLength: data?.length || 0,
+				hasError: !!error,
+				count: count || 'N/A'
+			})
+			
 			if (error) {
 				console.error('[sharedItemsStorage] Supabase error loading shared compositions:', error)
+				console.error('[sharedItemsStorage] Error code:', error.code)
+				console.error('[sharedItemsStorage] Error message:', error.message)
 				console.error('[sharedItemsStorage] Error details:', JSON.stringify(error, null, 2))
+				console.error('[sharedItemsStorage] Error hint:', error.hint || 'N/A')
+				
+				// Try alternative query without order
+				console.log('[sharedItemsStorage] Trying alternative query without order...')
+				const { data: altData, error: altError } = await supabase
+					.from('compositions')
+					.select('*')
+					.eq('is_public', true)
+				
+				if (altError) {
+					console.error('[sharedItemsStorage] Alternative query also failed:', altError)
+					return loadLocalSharedCompositions()
+				}
+				
+				if (altData) {
+					console.log('[sharedItemsStorage] Alternative query succeeded, got', altData.length, 'items')
+					return transformSupabaseCompositions(altData)
+				}
+				
 				return loadLocalSharedCompositions()
 			}
 			
-			console.log('[sharedItemsStorage] Loaded', data?.length || 0, 'public compositions from Supabase')
+			if (!data || data.length === 0) {
+				console.warn('[sharedItemsStorage] Query succeeded but returned no data. Count:', count)
+				return loadLocalSharedCompositions()
+			}
 			
-			// Transform Supabase data to SharedComposition format
-			const sharedCompositions: SharedComposition[] = (data || []).map(item => ({
-				id: item.id,
-				originalId: item.id,
-				name: item.name,
-				chords: item.chords as SharedComposition['chords'],
-				tempo: item.tempo,
-				timeSignature: item.time_signature as '3/4' | '4/4',
-				fluteType: 'innato', // Default
-				tuning: '440', // Default
-				sharedBy: item.user_id,
-				sharedByUsername: 'Anonymous', // TODO: Get from user profile table
-				sharedAt: new Date(item.created_at).getTime(),
-				isPublic: true,
-				favoriteCount: 0, // TODO: Calculate from favorites table
-				isReadOnly: true,
-				createdAt: new Date(item.created_at).getTime(),
-				updatedAt: new Date(item.updated_at).getTime(),
-				version: item.version || 1
-			}))
+			console.log('[sharedItemsStorage] Successfully loaded', data.length, 'public compositions')
+			
+			function transformSupabaseCompositions(items: any[]): SharedComposition[] {
+				return items.map(item => ({
+					id: item.id,
+					originalId: item.id,
+					name: item.name,
+					chords: item.chords as SharedComposition['chords'],
+					tempo: item.tempo,
+					timeSignature: item.time_signature as '3/4' | '4/4',
+					fluteType: 'innato',
+					tuning: '440',
+					sharedBy: item.user_id,
+					sharedByUsername: 'Anonymous',
+					sharedAt: new Date(item.created_at).getTime(),
+					isPublic: true,
+					favoriteCount: 0,
+					isReadOnly: true,
+					createdAt: new Date(item.created_at).getTime(),
+					updatedAt: new Date(item.updated_at).getTime(),
+					version: item.version || 1
+				}))
+			}
+			
+			const sharedCompositions = transformSupabaseCompositions(data)
 			
 			// Also merge with localStorage for backward compatibility
 			const localShared = loadLocalSharedCompositions()
