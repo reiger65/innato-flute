@@ -150,13 +150,63 @@ class LocalLessonsService implements LessonsService {
 						title: item.title,
 						subtitle: item.subtitle || '',
 						topic: item.topic || item.category || '', // Use topic field, fallback to category
-						description: item.description || '',
+						description: item.description || '', // Preserve description
 						category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
 						compositionId: item.composition_id,
 						unlocked: false, // Will be calculated
 						completed: false // Will be loaded from progress
 					} as Lesson
 				})
+				
+				// If admin is logged in and Supabase has lessons, check if local lessons need syncing
+				const user = getCurrentUser()
+				if (user) {
+					const { isAdmin } = await import('./authService')
+					if (isAdmin(user) && supabaseLessons.length > 0) {
+						// Check if there are local lessons not in Supabase
+						const localLessons = localLoadLessons()
+						const supabaseCustomIds = new Set(supabaseLessons.map(l => l.id))
+						const localOnly = localLessons.filter(l => !supabaseCustomIds.has(l.id))
+						
+						// Auto-sync local lessons that aren't in Supabase (one-time per session)
+						if (localOnly.length > 0) {
+							const syncKey = `lesson-auto-sync-${user.id}`
+							if (!sessionStorage.getItem(syncKey)) {
+								try {
+									const synced = await syncLocalLessonsToSupabase()
+									if (synced > 0) {
+										console.log(`[lessonsService] Auto-synced ${synced} local lessons to Supabase`)
+										// Reload from Supabase after sync
+										const { data: reloadData } = await supabase
+											.from('lessons')
+											.select('*')
+											.order('lesson_number', { ascending: true })
+										
+										if (reloadData) {
+											sessionStorage.setItem(syncKey, 'true')
+											return (reloadData || []).map(item => {
+												const customId = item.custom_id || `lesson-${item.lesson_number}`
+												return {
+													id: customId,
+													title: item.title,
+													subtitle: item.subtitle || '',
+													topic: item.topic || item.category || '',
+													description: item.description || '',
+													category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
+													compositionId: item.composition_id,
+													unlocked: false,
+													completed: false
+												} as Lesson
+											})
+										}
+									}
+								} catch (syncError) {
+									console.error('[lessonsService] Error auto-syncing lessons:', syncError)
+								}
+							}
+						}
+					}
+				}
 				
 				// If we have Supabase lessons, use them (they're global)
 				if (supabaseLessons.length > 0) {
