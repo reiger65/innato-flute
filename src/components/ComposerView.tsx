@@ -805,7 +805,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			{/* Description with info button */}
 			<div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
 				<p className="composer-description" style={{ flex: 1, margin: 0 }}>
-				Create your own musical journey. Select chords, add pauses with the ○ button, adjust rhythm with + and - buttons, and drag to reorder. Choose 4/4 or 3/4 time signature, set your tempo, and toggle the metronome for timing. When you're ready, press Play to hear your creation come to life.
+				Create your composition: add chords, adjust rhythm with +/-, drag to reorder. Set time signature, tempo, and metronome. Press Play to hear it.
 			</p>
 				<button 
 					className="section-info-btn"
