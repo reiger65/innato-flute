@@ -35,3 +35,5 @@ SELECT
 FROM progressions 
 WHERE is_public = TRUE;
 
+
+

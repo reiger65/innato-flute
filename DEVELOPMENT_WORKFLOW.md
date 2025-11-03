@@ -415,3 +415,5 @@ SELECT * FROM compositions WHERE user_id = 'user-uuid';
 5. **Documenteer custom queries** die je vaak gebruikt
 
 
+
+

@@ -42,7 +42,15 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		setLoading(true)
 		try {
 			const loadedLessons = await loadLessons()
-			setLessons(loadedLessons)
+			// Sort lessons by lesson number (lesson-1, lesson-2, etc.) so newest is last
+			const getLessonNumber = (id: string): number => {
+				const match = id.match(/lesson-(\d+)/)
+				return match ? parseInt(match[1], 10) : 0
+			}
+			const sortedLessons = [...loadedLessons].sort((a, b) => {
+				return getLessonNumber(a.id) - getLessonNumber(b.id)
+			})
+			setLessons(sortedLessons)
 		} catch (error) {
 			console.error('Error loading lessons:', error)
 		} finally {
@@ -125,8 +133,8 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		newLessons.splice(draggedIndex, 1)
 		newLessons.splice(dropIndex, 0, draggedLesson)
 
-		// Update lesson IDs to be sequential
-		const reorderedIds = newLessons.map((_, index) => `lesson-${index + 1}`)
+		// Get the IDs in the new order
+		const reorderedIds = newLessons.map(lesson => lesson.id)
 		
 		setLoading(true)
 		try {
@@ -151,7 +159,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		newLessons[index] = newLessons[index - 1]
 		newLessons[index - 1] = temp
 
-		const reorderedIds = newLessons.map((_, i) => `lesson-${i + 1}`)
+		const reorderedIds = newLessons.map(lesson => lesson.id)
 		
 		setLoading(true)
 		try {
@@ -175,7 +183,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		newLessons[index] = newLessons[index + 1]
 		newLessons[index + 1] = temp
 
-		const reorderedIds = newLessons.map((_, i) => `lesson-${i + 1}`)
+		const reorderedIds = newLessons.map(lesson => lesson.id)
 		
 		setLoading(true)
 		try {

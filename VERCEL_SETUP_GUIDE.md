@@ -114,3 +114,5 @@ Zodra Vercel gekoppeld is aan GitHub:
 Je app is nu online en blijft automatisch up-to-date! 🚀
 
 
+
+

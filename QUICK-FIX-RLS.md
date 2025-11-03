@@ -50,3 +50,5 @@ supabase db execute --file FIX-RLS-PUBLIC-ITEMS.sql
 - Refresh your app on both iPhone and desktop
 - Both should now see ALL public items from all users
 
+
+

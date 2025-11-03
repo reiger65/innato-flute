@@ -94,9 +94,22 @@ export function updateLesson(lessonId: string, updates: Partial<Lesson>): boolea
  */
 export function addLesson(lesson: Omit<Lesson, 'id'>): Lesson {
 	const lessons = loadLessons()
+	
+	// Find the highest lesson number to assign the next sequential ID
+	const getLessonNumber = (id: string): number => {
+		const match = id.match(/lesson-(\d+)/)
+		return match ? parseInt(match[1], 10) : 0
+	}
+	
+	const maxLessonNumber = lessons.reduce((max, l) => {
+		const num = getLessonNumber(l.id)
+		return num > max ? num : max
+	}, 0)
+	
+	const nextLessonNumber = maxLessonNumber + 1
 	const newLesson: Lesson = {
 		...lesson,
-		id: `lesson-${Date.now()}`
+		id: `lesson-${nextLessonNumber}`
 	}
 	lessons.push(newLesson)
 	saveLessons(lessons)

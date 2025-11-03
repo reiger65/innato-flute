@@ -6,7 +6,7 @@
  */
 
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient'
-import { getCurrentUser } from './authService'
+import { getCurrentUser, isAdmin } from './authService'
 import type { SavedProgression } from './progressionStorage'
 
 // Re-export types for convenience
@@ -17,6 +17,14 @@ import {
 	deleteProgression as deleteLocal,
 	getProgression as getLocal
 } from './progressionStorage'
+
+// Export deleteAllProgressions for use in console
+if (typeof window !== 'undefined') {
+	(window as any).deleteAllProgressions = async () => {
+		const { deleteAllProgressions } = await import('./progressionService')
+		return await deleteAllProgressions()
+	}
+}
 
 /**
  * Sync local progressions to Supabase (migrates localStorage → Supabase)
@@ -211,6 +219,56 @@ export async function deleteProgression(id: string): Promise<boolean> {
 	}
 	
 	return deleteLocal(id)
+}
+
+/**
+ * Delete ALL progressions for the current user (Admin only)
+ */
+export async function deleteAllProgressions(): Promise<number> {
+	// Check if user is admin
+	const user = getCurrentUser()
+	if (!isAdmin(user)) {
+		console.error('[progressionService] Only admins can delete all progressions')
+		throw new Error('Only admins can delete all progressions')
+	}
+	
+	// Get count before deletion
+	const beforeCount = (await loadProgressions()).length
+	
+	if (isSupabaseConfigured()) {
+		try {
+			const supabase = getSupabaseClient()
+			if (supabase) {
+				const { data: { session } } = await supabase.auth.getSession()
+				if (session?.user?.id) {
+					// Delete all from Supabase
+					const { error } = await supabase
+						.from('progressions')
+						.delete()
+						.eq('user_id', session.user.id)
+					
+					if (error) {
+						console.warn('[progressionService] Error deleting all from Supabase:', error)
+					} else {
+						console.log('[progressionService] Deleted all progressions from Supabase')
+					}
+				}
+			}
+		} catch (error) {
+			console.error('[progressionService] Error deleting all from Supabase:', error)
+		}
+	}
+	
+	// Also clear localStorage completely
+	try {
+		const STORAGE_KEY = 'innato-progressions'
+		localStorage.removeItem(STORAGE_KEY)
+		console.log('[progressionService] Cleared all progressions from localStorage')
+	} catch (error) {
+		console.error('[progressionService] Error clearing localStorage:', error)
+	}
+	
+	return beforeCount
 }
 
 /**

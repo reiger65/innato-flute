@@ -22,7 +22,7 @@ function ToastItem({ toast, onRemove }: ToastProps) {
 		setTimeout(() => setIsVisible(true), 10)
 
 		// Auto-remove after duration
-		const duration = toast.duration || 3000
+		const duration = toast.duration || 1000
 		const timer = setTimeout(() => {
 			setIsVisible(false)
 			setTimeout(() => onRemove(toast.id), 300) // Wait for fade-out
@@ -156,12 +156,14 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
 			style={{
 				position: 'fixed',
 				top: '80px',
-				right: '20px',
+				left: '50%',
+				transform: 'translateX(-50%)',
 				zIndex: 10000,
 				display: 'flex',
 				flexDirection: 'column',
 				gap: 'var(--space-2)',
 				maxWidth: '400px',
+				width: 'auto',
 				pointerEvents: 'none'
 			}}
 			aria-live="polite"
@@ -192,7 +194,7 @@ export function useToast() {
 	}
 
 	const showSuccess = (message: string, duration?: number) => showToast(message, 'success', duration)
-	const showError = (message: string, duration?: number) => showToast(message, 'error', duration || 5000)
+	const showError = (message: string, duration?: number) => showToast(message, 'error', duration || 1000)
 	const showWarning = (message: string, duration?: number) => showToast(message, 'warning', duration)
 	const showInfo = (message: string, duration?: number) => showToast(message, 'info', duration)
 

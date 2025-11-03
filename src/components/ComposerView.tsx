@@ -5,8 +5,8 @@ import { fingeringToOpenStates, getFingeringForChord } from '../lib/chordMapping
 import { getNotesFromOpenStates } from '../lib/fluteData'
 import type { FluteType, TuningFrequency } from '../lib/fluteData'
 import { simplePlayer } from '../lib/simpleAudioPlayer'
-import { saveComposition, loadCompositions, deleteComposition, updateComposition, type SavedComposition } from '../lib/compositionService'
-import { loadProgressions, deleteProgression, type SavedProgression } from '../lib/progressionService'
+import { saveComposition, loadCompositions, deleteComposition, updateComposition, deleteAllCompositions, type SavedComposition } from '../lib/compositionService'
+import { loadProgressions, deleteProgression, deleteAllProgressions, type SavedProgression } from '../lib/progressionService'
 import { saveSharedComposition, loadSharedCompositions, saveSharedProgression, loadSharedProgressions } from '../lib/sharedItemsStorage'
 import { getCurrentUser, isAdmin } from '../lib/authService'
 import { AddToLessonsModal } from './AddToLessonsModal'
@@ -61,6 +61,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	// State for compositions and progressions
 	const [savedCompositions, setSavedCompositions] = useState<SavedComposition[]>([])
 	const [savedProgressions, setSavedProgressions] = useState<SavedProgression[]>([])
+	// State for selected compositions for deletion
+	const [selectedCompositionIds, setSelectedCompositionIds] = useState<Set<string>>(new Set())
 	const isPlayingRef = useRef(false)
 	const metronomeIntervalRef = useRef<number | null>(null)
 	const isPlayingMetronomeRef = useRef(false)
@@ -74,7 +76,15 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 					loadCompositions(),
 					loadProgressions()
 				])
-				setSavedCompositions(comps)
+				
+				// Filter out deleted compositions using the deleted IDs list
+				const deletedIdsKey = 'deleted-composition-ids'
+				const deletedIds = new Set(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+				const filteredComps = comps.filter(c => !deletedIds.has(c.id))
+				
+				console.log(`[ComposerView] Loaded ${comps.length} compositions, filtered to ${filteredComps.length} (deleted: ${deletedIds.size})`)
+				
+				setSavedCompositions(filteredComps)
 				setSavedProgressions(progs)
 			} catch (error) {
 				console.error('Error loading data:', error)
@@ -146,6 +156,20 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	 */
 	const handleRemoveChord = (index: number) => {
 		const newChords = chords.filter((_, i) => i !== index)
+		setChords(newChords)
+	}
+
+	/**
+	 * Duplicate a chord/rest in the composition
+	 */
+	const handleDuplicateChord = (index: number) => {
+		const chordToDuplicate = chords[index]
+		const duplicatedChord = {
+			...chordToDuplicate,
+			id: `chord-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+		}
+		const newChords = [...chords]
+		newChords.splice(index + 1, 0, duplicatedChord)
 		setChords(newChords)
 	}
 
@@ -403,11 +427,168 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			try {
 				const success = await deleteComposition(id)
 				if (success) {
-				setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
-			}
+					// If the deleted composition was currently loaded, clear it
+					if (loadedCompositionId === id) {
+						setChords([])
+						setLoadedCompositionId(null)
+						setLoadedCompositionName('')
+						setSaveModalName('')
+					}
+					setOpenModalRefresh(prev => prev + 1) // Force re-render of open modal list
+					onShowToast?.(`Composition "${name}" deleted successfully`, 'success')
+				} else {
+					onShowToast?.('Failed to delete composition. Please try again.', 'error')
+				}
 			} catch (error) {
 				console.error('Error deleting composition:', error)
 				onShowToast?.('Error deleting composition. Please try again.', 'error')
+			}
+		}
+	}
+
+	/**
+	 * Toggle selection of a composition
+	 */
+	const toggleCompositionSelection = (id: string) => {
+		setSelectedCompositionIds(prev => {
+			const newSet = new Set(prev)
+			if (newSet.has(id)) {
+				newSet.delete(id)
+			} else {
+				newSet.add(id)
+			}
+			return newSet
+		})
+	}
+
+	/**
+	 * Select/deselect all compositions
+	 */
+	const toggleSelectAllCompositions = () => {
+		if (selectedCompositionIds.size === savedCompositions.length) {
+			// Deselect all
+			setSelectedCompositionIds(new Set())
+		} else {
+			// Select all
+			setSelectedCompositionIds(new Set(savedCompositions.map(c => c.id)))
+		}
+	}
+
+	/**
+	 * Handle delete selected compositions
+	 */
+	const handleDeleteSelectedCompositions = async () => {
+		const selectedIds = Array.from(selectedCompositionIds)
+		const count = selectedIds.length
+		
+		if (count === 0) {
+			onShowToast?.('No compositions selected.', 'info')
+			return
+		}
+		
+		const selectedCompositions = savedCompositions.filter(c => selectedIds.includes(c.id))
+		const names = selectedCompositions.map(c => c.name).join(', ')
+		
+		if (confirm(`Are you sure you want to delete ${count} selected composition${count === 1 ? '' : 's'}?\n\n${names}\n\nThis action cannot be undone.`)) {
+			try {
+				let successCount = 0
+				let failCount = 0
+				
+				// Delete selected compositions
+				for (const id of selectedIds) {
+					try {
+						const comp = savedCompositions.find(c => c.id === id)
+						console.log(`Attempting to delete composition: ${id} (${comp?.name || 'unknown'})`)
+						const success = await deleteComposition(id)
+						if (success) {
+							successCount++
+							console.log(`Successfully deleted composition: ${id}`)
+						} else {
+							failCount++
+							console.warn(`Failed to delete composition: ${id} (${comp?.name || 'unknown'}) - deleteComposition returned false`)
+						}
+					} catch (error) {
+						failCount++
+						console.error(`Error deleting composition ${id}:`, error)
+					}
+				}
+				
+				// Small delay to ensure deletions are processed
+				await new Promise(resolve => setTimeout(resolve, 100))
+				
+				// Clear the currently loaded composition if it was deleted
+				if (loadedCompositionId && selectedIds.includes(loadedCompositionId)) {
+					setChords([])
+					setLoadedCompositionId(null)
+					setLoadedCompositionName('')
+					setSaveModalName('')
+				}
+				
+				// Clear selections first
+				setSelectedCompositionIds(new Set())
+				
+				// Filter out deleted compositions immediately
+				const deletedIdsKey = 'deleted-composition-ids'
+				const deletedIds = new Set(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+				const remainingComps = savedCompositions.filter(c => !selectedIds.includes(c.id) && !deletedIds.has(c.id))
+				setSavedCompositions(remainingComps)
+				
+				// Wait a bit longer for Supabase to process
+				await new Promise(resolve => setTimeout(resolve, 300))
+				
+				// Force reload of compositions via useEffect
+				setOpenModalRefresh(prev => prev + 1)
+				
+				// Reload the compositions list multiple times to ensure we get fresh data
+				let updatedCompositions = await loadCompositions()
+				// Filter again to ensure deleted ones don't show up
+				const filteredUpdated = updatedCompositions.filter(c => !deletedIds.has(c.id))
+				setSavedCompositions(filteredUpdated)
+				
+				// Wait and reload again
+				await new Promise(resolve => setTimeout(resolve, 200))
+				updatedCompositions = await loadCompositions()
+				const filteredUpdated2 = updatedCompositions.filter(c => !deletedIds.has(c.id))
+				setSavedCompositions(filteredUpdated2)
+				
+				// Verify deletion worked (check filtered list)
+				const remainingIds = filteredUpdated2.map(c => c.id)
+				const stillPresent = selectedIds.filter(id => remainingIds.includes(id))
+				
+				if (stillPresent.length > 0) {
+					console.warn(`Some compositions still appear after deletion: ${stillPresent.join(', ')}`)
+					console.warn('They have been marked as deleted and should not appear on next reload')
+					// Force another reload with filtering
+					setTimeout(async () => {
+						const recheckCompositions = await loadCompositions()
+						const deletedIdsSet = new Set(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+						const filteredRecheck = recheckCompositions.filter(c => !deletedIdsSet.has(c.id))
+						setSavedCompositions(filteredRecheck)
+						const finalRemaining = filteredRecheck.map(c => c.id)
+						const finalStillPresent = selectedIds.filter(id => finalRemaining.includes(id))
+						if (finalStillPresent.length > 0) {
+							console.error(`Still unable to hide: ${finalStillPresent.join(', ')}`)
+							onShowToast?.(`Could not hide ${finalStillPresent.length} composition(s). They may be re-syncing from Supabase.`, 'error')
+						}
+					}, 1000)
+				}
+				
+				if (failCount === 0 && stillPresent.length === 0) {
+					onShowToast?.(`${successCount} composition${successCount === 1 ? '' : 's'} deleted successfully`, 'success')
+				} else {
+					onShowToast?.(`Deleted ${successCount} composition${successCount === 1 ? '' : 's'}, ${failCount + stillPresent.length} failed`, 'error')
+				}
+			} catch (error) {
+				console.error('Error deleting selected compositions:', error)
+				onShowToast?.('Error deleting compositions. Please try again.', 'error')
+				// Still try to reload
+				try {
+					const updatedCompositions = await loadCompositions()
+					setSavedCompositions(updatedCompositions)
+					setOpenModalRefresh(prev => prev + 1)
+				} catch (reloadError) {
+					console.error('Error reloading compositions:', reloadError)
+				}
 			}
 		}
 	}
@@ -1142,6 +1323,21 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 									</button>
 								</div>
 
+								{/* Duplicate Button */}
+								<button
+									className="composer-timeline-duplicate-btn"
+									onClick={(e) => {
+										e.stopPropagation()
+										handleDuplicateChord(index)
+									}}
+									title="Duplicate"
+								>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+										<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+										<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+									</svg>
+								</button>
+
 								{/* Remove Button */}
 								<button
 										className="composer-timeline-remove-btn"
@@ -1235,23 +1431,6 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 						</svg>
 						Open
 					</button>
-					{/* Add to Lessons - Only for admin when composition is saved */}
-					{isAdmin(currentUser) && loadedCompositionId && (
-						<button 
-							className="btn-sm tab" 
-							onClick={() => setShowAddToLessonsModal(true)}
-							disabled={!loadedCompositionId}
-							title="Add to Lessons"
-						>
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
-								<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-								<polyline points="14 2 14 8 20 8"></polyline>
-								<line x1="12" y1="18" x2="12" y2="12"></line>
-								<line x1="9" y1="15" x2="15" y2="15"></line>
-							</svg>
-							Add to Lessons
-						</button>
-					)}
 				</div>
 			</div>
 
@@ -1297,10 +1476,57 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 
 			{/* Open Modal */}
 			{showOpenModal && (
-				<div className="modal-overlay" onClick={() => setShowOpenModal(false)}>
+				<div className="modal-overlay" onClick={() => {
+					setShowOpenModal(false)
+					setSelectedCompositionIds(new Set()) // Clear selections when closing
+				}}>
 					<div className="modal-content" onClick={(e) => e.stopPropagation()}>
-						<div className="modal-header">
+						<div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
 							<h2 className="modal-title">Open Composition</h2>
+							{savedCompositions.length > 0 && (
+								<div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+									<button
+										className="btn-sm"
+										onClick={(e) => {
+											e.preventDefault()
+											e.stopPropagation()
+											toggleSelectAllCompositions()
+										}}
+										style={{ 
+											fontSize: 'var(--font-size-sm)',
+											padding: 'var(--space-1) var(--space-2)',
+											background: 'transparent',
+											border: 'var(--border-2) solid var(--color-black)',
+											color: 'var(--color-black)',
+											cursor: 'pointer'
+										}}
+										title={selectedCompositionIds.size === savedCompositions.length ? 'Deselect all' : 'Select all'}
+									>
+										{selectedCompositionIds.size === savedCompositions.length ? 'Deselect All' : 'Select All'}
+									</button>
+									{selectedCompositionIds.size > 0 && (
+										<button
+											className="btn-sm"
+											onClick={async (e) => {
+												e.preventDefault()
+												e.stopPropagation()
+												await handleDeleteSelectedCompositions()
+											}}
+											style={{ 
+												fontSize: 'var(--font-size-sm)',
+												padding: 'var(--space-1) var(--space-2)',
+												background: 'var(--color-black)',
+												border: 'var(--border-2) solid var(--color-black)',
+												color: 'var(--color-white)',
+												cursor: 'pointer'
+											}}
+											title={`Delete ${selectedCompositionIds.size} selected composition${selectedCompositionIds.size === 1 ? '' : 's'}`}
+										>
+											Delete Selected ({selectedCompositionIds.size})
+										</button>
+									)}
+								</div>
+							)}
 						</div>
 						<div className="modal-body">
 							{savedCompositions.length === 0 ? (
@@ -1320,21 +1546,111 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 												border: 'var(--border-2) solid var(--color-black)',
 												borderRadius: 'var(--radius-2)',
 												cursor: 'pointer',
-												transition: 'background 0.2s ease'
+												transition: 'background 0.2s ease',
+												backgroundColor: selectedCompositionIds.has(composition.id) ? 'rgba(0, 0, 0, 0.1)' : 'transparent'
 											}}
 											onClick={() => handleOpenComposition(composition)}
-											onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)'}
-											onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+											onMouseEnter={(e) => {
+												if (!selectedCompositionIds.has(composition.id)) {
+													e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)'
+												}
+											}}
+											onMouseLeave={(e) => {
+												if (!selectedCompositionIds.has(composition.id)) {
+													e.currentTarget.style.background = 'transparent'
+												} else {
+													e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)'
+												}
+											}}
 										>
-											<div>
-												<div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-1)' }}>
-													{composition.name}
+											<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: 1 }}>
+												<div
+													onClick={(e) => {
+														e.stopPropagation()
+														toggleCompositionSelection(composition.id)
+													}}
+													style={{
+														width: '18px',
+														height: '18px',
+														cursor: 'pointer',
+														flexShrink: 0,
+														border: '2px solid var(--color-black)',
+														borderRadius: '2px',
+														backgroundColor: selectedCompositionIds.has(composition.id) ? 'var(--color-black)' : 'var(--color-white)',
+														position: 'relative',
+														display: 'flex',
+														alignItems: 'center',
+														justifyContent: 'center'
+													}}
+												>
+													{selectedCompositionIds.has(composition.id) && (
+														<svg 
+															width="12" 
+															height="12" 
+															viewBox="0 0 12 12" 
+															fill="none" 
+															stroke="var(--color-white)" 
+															strokeWidth="2" 
+															strokeLinecap="round" 
+															strokeLinejoin="round"
+															style={{ pointerEvents: 'none' }}
+														>
+															<polyline points="2 6 5 9 10 2"></polyline>
+														</svg>
+													)}
 												</div>
-												<div style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(0, 0, 0, 0.6)' }}>
-													{composition.chords.length} {composition.chords.length === 1 ? 'chord' : 'chords'} • {composition.tempo} BPM • {composition.timeSignature}
+												<div>
+													<div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-1)' }}>
+														{composition.name}
+													</div>
+													<div style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(0, 0, 0, 0.6)' }}>
+														{composition.chords.length} {composition.chords.length === 1 ? 'chord' : 'chords'} • {composition.tempo} BPM • {composition.timeSignature}
+													</div>
 												</div>
 											</div>
 											<div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexShrink: 0 }}>
+												{isAdmin(currentUser) && (
+													<button
+														className="icon-btn-sm"
+														onClick={(e) => {
+															e.stopPropagation()
+															// Set the composition as loaded first
+															handleOpenComposition(composition)
+															// Then show the add to lessons modal
+															setTimeout(() => {
+																setShowAddToLessonsModal(true)
+															}, 100)
+														}}
+														title="Add to Lessons"
+														style={{ 
+															width: '28px',
+															height: '28px',
+															border: '2px solid #000',
+															borderRadius: '50%',
+															display: 'flex',
+															alignItems: 'center',
+															justifyContent: 'center',
+															background: '#fff',
+															cursor: 'pointer',
+															flexShrink: 0
+														}}
+														onMouseEnter={(e) => {
+															e.currentTarget.style.background = '#000'
+															e.currentTarget.style.color = '#fff'
+														}}
+														onMouseLeave={(e) => {
+															e.currentTarget.style.background = '#fff'
+															e.currentTarget.style.color = '#000'
+														}}
+													>
+														<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', display: 'block' }}>
+															<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+															<polyline points="14 2 14 8 20 8"></polyline>
+															<line x1="12" y1="18" x2="12" y2="12"></line>
+															<line x1="9" y1="15" x2="15" y2="15"></line>
+														</svg>
+													</button>
+												)}
 												<button
 													className="icon-btn-sm"
 													onClick={(e) => {
@@ -1403,7 +1719,33 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 								</div>
 							)}
 						</div>
-						<div className="modal-footer">
+						<div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+							{isAdmin(currentUser) && savedCompositions.length > 0 && (
+								<button 
+									className="btn-sm" 
+									onClick={async () => {
+										if (confirm('⚠️ WARNING: This will delete ALL compositions. This cannot be undone!\n\nAre you absolutely sure?')) {
+											try {
+												const deleted = await deleteAllCompositions()
+												onShowToast?.(`Deleted ${deleted} compositions`, 'success')
+												setOpenModalRefresh(prev => prev + 1)
+												setSavedCompositions([])
+												setSelectedCompositionIds(new Set())
+											} catch (error) {
+												console.error('Error deleting all compositions:', error)
+												onShowToast?.('Error deleting all compositions', 'error')
+											}
+										}
+									}}
+									style={{ 
+										background: 'transparent',
+										border: '2px solid red',
+										color: 'red'
+									}}
+								>
+									Delete All Compositions
+								</button>
+							)}
 							<button className="btn-sm" onClick={() => setShowOpenModal(false)}>
 								Close
 							</button>

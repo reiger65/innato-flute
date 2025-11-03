@@ -25,3 +25,5 @@ SELECT
     COUNT(*) FILTER (WHERE is_public = TRUE) as public_count
 FROM progressions;
 
+
+

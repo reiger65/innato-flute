@@ -83,3 +83,5 @@ Zodra database werkt lokaal:
 **Laat weten wanneer schema is gemigreerd, dan testen we alles!** 🎉
 
 
+
+

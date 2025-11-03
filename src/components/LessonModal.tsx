@@ -278,7 +278,8 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 	}
 
 	const handleMarkComplete = () => {
-		saveLessonProgress(lesson.id, true)
+		const newCompletedState = !lesson.completed
+		saveLessonProgress(lesson.id, newCompletedState)
 		onComplete(lesson.id)
 	}
 
@@ -490,7 +491,7 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 
 				{/* Complete Button */}
 				<button className="lesson-complete-btn" onClick={handleMarkComplete}>
-					✓ Mark as Complete
+					{lesson.completed ? '✗ Mark as Incomplete' : '✓ Mark as Complete'}
 				</button>
 
 				{/* Footer */}

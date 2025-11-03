@@ -60,3 +60,5 @@ Ik maak een script dat het wachtwoord direct reset via Supabase Admin API.
 **Welke optie wil je proberen?** Of maak ik het Admin API script voor je?
 
 
+
+

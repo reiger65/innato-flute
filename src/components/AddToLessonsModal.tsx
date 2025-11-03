@@ -11,7 +11,7 @@ interface AddToLessonsModalProps {
 
 export function AddToLessonsModal({ isOpen, compositionId, compositionName, onClose, onSuccess }: AddToLessonsModalProps) {
 	const [title, setTitle] = useState(compositionName)
-	const [description, setDescription] = useState('Practice this composition')
+	const [description, setDescription] = useState('')
 	const [category, setCategory] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState('')
@@ -32,7 +32,7 @@ export function AddToLessonsModal({ isOpen, compositionId, compositionName, onCl
 		try {
 			await addLesson({
 				title: title.trim(),
-				description: description.trim() || 'Practice this composition',
+				description: description.trim(),
 				category,
 				compositionId,
 				unlocked: false,
@@ -51,7 +51,7 @@ export function AddToLessonsModal({ isOpen, compositionId, compositionName, onCl
 
 	const handleCancel = () => {
 		setTitle(compositionName)
-		setDescription('Practice this composition')
+		setDescription('')
 		setCategory('beginner')
 		setError('')
 		onClose()

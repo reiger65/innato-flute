@@ -37,3 +37,5 @@ Het SQL bestand is al geopend. Je hoeft alleen:
 - B) Handmatig doen → Veilig, 2 minuten
 
 
+
+

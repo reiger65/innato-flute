@@ -1103,6 +1103,35 @@ select.btn-sm:active {
 	cursor: not-allowed;
 }
 
+.composer-timeline-duplicate-btn {
+	position: absolute;
+	top: -8px;
+	left: -8px;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: var(--border-2) solid var(--color-black);
+	border-radius: 50%;
+	background: var(--color-white);
+	color: var(--color-black);
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+	z-index: 10;
+}
+
+.composer-timeline-item:hover .composer-timeline-duplicate-btn {
+	opacity: 1;
+}
+
+.composer-timeline-duplicate-btn:hover {
+	background: var(--color-black);
+	color: var(--color-white);
+}
+
 .composer-timeline-remove-btn {
 	position: absolute;
 	top: -8px;

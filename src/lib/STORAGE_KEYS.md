@@ -37,3 +37,5 @@ Dit document beschrijft alle localStorage keys die gebruikt worden in de app om 
 4. **Separate namespace**: Community data is volledig gescheiden van persoonlijke data
 
 
+
+

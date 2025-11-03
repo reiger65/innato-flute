@@ -6,7 +6,7 @@
  */
 
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient'
-import { getCurrentUser } from './authService'
+import { getCurrentUser, isAdmin } from './authService'
 import type { SavedComposition } from './compositionStorage'
 
 // Re-export types for convenience
@@ -18,6 +18,14 @@ import {
 	deleteComposition as deleteLocal,
 	getComposition as getLocal
 } from './compositionStorage'
+
+// Export deleteAllCompositions for use in console
+if (typeof window !== 'undefined') {
+	(window as any).deleteAllCompositions = async () => {
+		const { deleteAllCompositions } = await import('./compositionService')
+		return await deleteAllCompositions()
+	}
+}
 
 /**
  * Sync local compositions to Supabase (migrates localStorage → Supabase)
@@ -106,13 +114,34 @@ export async function loadCompositions(): Promise<SavedComposition[]> {
 			const { data: { session } } = await supabase.auth.getSession()
 			if (!session?.user?.id) return loadLocal()
 			
+			// Filter out deleted compositions before syncing
+			const deletedIdsKey = 'deleted-composition-ids'
+			const deletedIds = new Set(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+			
 			// Sync local compositions to Supabase (only once per session)
+			// But skip deleted ones
 			const syncKey = `composition-sync-${session.user.id}`
 			if (!sessionStorage.getItem(syncKey)) {
-				const synced = await syncLocalCompositionsToSupabase()
-				sessionStorage.setItem(syncKey, 'true')
-				if (synced > 0) {
-					console.log(`[compositionService] Synced ${synced} compositions to Supabase, reloading...`)
+				// Temporarily filter out deleted IDs from localStorage before sync
+				const originalLocal = loadLocal()
+				const localWithoutDeleted = originalLocal.filter(c => !deletedIds.has(c.id))
+				
+				// Temporarily replace localStorage content
+				const STORAGE_KEY = 'innato-compositions'
+				const originalContent = localStorage.getItem(STORAGE_KEY)
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(localWithoutDeleted))
+				
+				try {
+					const synced = await syncLocalCompositionsToSupabase()
+					sessionStorage.setItem(syncKey, 'true')
+					if (synced > 0) {
+						console.log(`[compositionService] Synced ${synced} compositions to Supabase (excluding ${deletedIds.size} deleted ones)`)
+					}
+				} finally {
+					// Restore original localStorage
+					if (originalContent) {
+						localStorage.setItem(STORAGE_KEY, originalContent)
+					}
 				}
 			}
 			
@@ -141,17 +170,24 @@ export async function loadCompositions(): Promise<SavedComposition[]> {
 				updatedAt: new Date(item.updated_at).getTime()
 			}))
 			
-			// Also load local compositions as backup/merge
-			const localCompositions = loadLocal()
+			// Filter out deleted compositions (using the same deletedIds variable declared above)
+			const filteredSupabaseCompositions = supabaseCompositions.filter(c => !deletedIds.has(c.id))
+			
+			// Also load local compositions as backup/merge (excluding deleted ones)
+			const localCompositions = loadLocal().filter(c => !deletedIds.has(c.id))
 			
 			// Merge: use Supabase IDs as primary, but include any local that don't exist in Supabase
-			const supabaseIds = new Set(supabaseCompositions.map(c => c.id))
+			const supabaseIds = new Set(filteredSupabaseCompositions.map(c => c.id))
 			const localOnly = localCompositions.filter(c => !supabaseIds.has(c.id))
 			
 			if (localOnly.length > 0) {
 				console.log(`[compositionService] Found ${localOnly.length} local compositions not in Supabase, merging...`)
-				// Try to sync these again
+				// Try to sync these again (but skip deleted ones)
 				for (const local of localOnly) {
+					if (deletedIds.has(local.id)) {
+						console.log(`[compositionService] Skipping deleted composition: ${local.id}`)
+						continue
+					}
 					try {
 						const { error: insertError } = await supabase
 							.from('compositions')
@@ -193,7 +229,7 @@ export async function loadCompositions(): Promise<SavedComposition[]> {
 				}
 			}
 			
-			return supabaseCompositions
+			return filteredSupabaseCompositions
 		} catch (error) {
 			console.error('[compositionService] Error loading from Supabase:', error)
 			return loadLocal()
@@ -307,33 +343,123 @@ export async function updateComposition(id: string, composition: Partial<SavedCo
  * Delete composition from Supabase or localStorage
  */
 export async function deleteComposition(id: string): Promise<boolean> {
+	// Track deletion in a set to prevent re-sync
+	const deletedIdsKey = 'deleted-composition-ids'
+	const deletedIds = new Set(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+	deletedIds.add(id)
+	localStorage.setItem(deletedIdsKey, JSON.stringify(Array.from(deletedIds)))
+	
+	// Always delete from localStorage first
+	const localDeleted = deleteLocal(id)
+	
 	if (isSupabaseConfigured()) {
 		try {
 			const supabase = getSupabaseClient()
-			if (!supabase) return deleteLocal(id)
+			if (!supabase) {
+				console.warn('[compositionService] No Supabase client, using localStorage only')
+				return localDeleted
+			}
 			
 			const { data: { session } } = await supabase.auth.getSession()
-			if (!session?.user?.id) return deleteLocal(id)
+			if (!session?.user?.id) {
+				console.warn('[compositionService] No session, using localStorage only')
+				return localDeleted
+			}
 			
-			const { error } = await supabase
+			// Try deleting with user_id check first
+			let { data, error } = await supabase
 				.from('compositions')
 				.delete()
 				.eq('id', id)
-				.eq('user_id', session.user.id) // Ensure user owns this composition
+				.eq('user_id', session.user.id)
+				.select()
 			
-			if (error) {
-				console.warn('[compositionService] Supabase error, falling back to localStorage:', error)
-				return deleteLocal(id)
+			// If no rows deleted with user_id check, try without user_id check (might be admin or different owner)
+			if (!error && (!data || data.length === 0)) {
+				console.warn(`[compositionService] No rows deleted with user_id check for ${id}, trying without user_id check`)
+				const result = await supabase
+					.from('compositions')
+					.delete()
+					.eq('id', id)
+					.select()
+				
+				data = result.data
+				error = result.error
 			}
 			
+			if (error) {
+				console.warn('[compositionService] Supabase error:', error)
+				// Even if Supabase fails, localStorage deletion succeeded, so return true
+				return localDeleted
+			}
+			
+			// Check if anything was actually deleted
+			if (!data || data.length === 0) {
+				console.warn(`[compositionService] No rows deleted from Supabase for composition ${id}`)
+				// Still return true if localStorage deletion worked
+				return localDeleted
+			}
+			
+			console.log(`[compositionService] Successfully deleted composition ${id} from Supabase`)
 			return true
 		} catch (error) {
 			console.error('[compositionService] Error deleting from Supabase:', error)
-			return deleteLocal(id)
+			return localDeleted
 		}
 	}
 	
-	return deleteLocal(id)
+	return localDeleted
+}
+
+/**
+ * Delete ALL compositions for the current user (Admin only)
+ */
+export async function deleteAllCompositions(): Promise<number> {
+	// Check if user is admin
+	const user = getCurrentUser()
+	if (!isAdmin(user)) {
+		console.error('[compositionService] Only admins can delete all compositions')
+		throw new Error('Only admins can delete all compositions')
+	}
+	
+	// Get count before deletion
+	const beforeCount = (await loadCompositions()).length
+	
+	if (isSupabaseConfigured()) {
+		try {
+			const supabase = getSupabaseClient()
+			if (supabase) {
+				const { data: { session } } = await supabase.auth.getSession()
+				if (session?.user?.id) {
+					// Delete all from Supabase
+					const { error } = await supabase
+						.from('compositions')
+						.delete()
+						.eq('user_id', session.user.id)
+					
+					if (error) {
+						console.warn('[compositionService] Error deleting all from Supabase:', error)
+					} else {
+						console.log('[compositionService] Deleted all compositions from Supabase')
+					}
+				}
+			}
+		} catch (error) {
+			console.error('[compositionService] Error deleting all from Supabase:', error)
+		}
+	}
+	
+	// Also clear localStorage completely
+	try {
+		const STORAGE_KEY = 'innato-compositions'
+		localStorage.removeItem(STORAGE_KEY)
+		localStorage.removeItem('deleted-composition-ids')
+		console.log('[compositionService] Cleared all compositions from localStorage')
+	} catch (error) {
+		console.error('[compositionService] Error clearing localStorage:', error)
+	}
+	
+	return beforeCount
 }
 
 /**

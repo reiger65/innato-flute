@@ -44,3 +44,5 @@ Run dit SQL script in Supabase SQL Editor:
    - Of email bevestigd is (zie `fix-admin-account.sql`)
 
 
+
+

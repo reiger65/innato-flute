@@ -79,3 +79,5 @@ De RLS policies staan ook in `SUPABASE_SCHEMA.sql`. Deze zorgen ervoor dat:
 - `.env.local` staat in `.gitignore` en wordt niet gecommit
 
 
+
+

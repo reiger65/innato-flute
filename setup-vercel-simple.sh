@@ -48,3 +48,5 @@ echo "🎉 KLAAR! Je app gebruikt nu Supabase online!"
 echo "   Je data synchroniseert nu tussen alle devices!"
 
 
+
+

@@ -40,3 +40,5 @@ SELECT
     COUNT(*) as total_count
 FROM progressions;
 
+
+

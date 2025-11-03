@@ -89,3 +89,5 @@ echo "Test de app om te verifiëren dat alles werkt:"
 echo "  ${BLUE}npm run dev${NC}"
 
 
+
+

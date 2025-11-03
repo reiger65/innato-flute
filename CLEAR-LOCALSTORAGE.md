@@ -40,3 +40,5 @@ The logs show Supabase is returning 0 compositions. This could mean:
 2. **Deploy new build** to Vercel (the code is fixed locally)
 3. **Check Supabase** to see if items exist and are marked as public
 
+
+
