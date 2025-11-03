@@ -40,9 +40,10 @@ export interface AuthResult {
 /**
  * Check if current user is an admin
  * Uses Supabase check when available, falls back to local check
+ * Returns false if user is null or undefined
  */
-export function isAdmin(user: User | null): boolean {
-	if (!user) return false
+export function isAdmin(user: User | null | undefined): boolean {
+	if (!user) return false // Explicitly handle null and undefined
 	
 	if (isSupabaseConfigured()) {
 		return supabaseIsAdmin(user)

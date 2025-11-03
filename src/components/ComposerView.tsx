@@ -8,7 +8,7 @@ import { simplePlayer } from '../lib/simpleAudioPlayer'
 import { saveComposition, loadCompositions, deleteComposition, updateComposition, deleteAllCompositions, type SavedComposition } from '../lib/compositionService'
 import { loadProgressions, deleteProgression, type SavedProgression } from '../lib/progressionService'
 import { saveSharedComposition, loadSharedCompositions, saveSharedProgression, loadSharedProgressions } from '../lib/sharedItemsStorage'
-import { getCurrentUser, isAdmin } from '../lib/authService'
+import { getCurrentUser, isAdmin, type User } from '../lib/authService'
 import { AddToLessonsModal } from './AddToLessonsModal'
 
 export interface ComposerChord {
@@ -60,7 +60,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	const [loadedCompositionName, setLoadedCompositionName] = useState<string | null>(null) // Track currently loaded composition name
 	const [openModalRefresh, setOpenModalRefresh] = useState(0) // Used to force re-render of open modal
 	const [progressionModalRefresh, setProgressionModalRefresh] = useState(0) // Used to force re-render of progression modal
-	const [currentUser, setCurrentUser] = useState(getCurrentUser())
+	const [currentUser, setCurrentUser] = useState<User | null>(getCurrentUser())
 	const [showAddToLessonsModal, setShowAddToLessonsModal] = useState(false)
 	// State for compositions and progressions
 	const [savedCompositions, setSavedCompositions] = useState<SavedComposition[]>([])
@@ -2066,7 +2066,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 							)}
 						</div>
 						<div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-							{isAdmin(currentUser) && savedCompositions.length > 0 && (
+							{currentUser && isAdmin(currentUser) && savedCompositions.length > 0 && (
 								<button 
 									className="btn-sm" 
 									onClick={async () => {

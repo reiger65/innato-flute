@@ -14,8 +14,7 @@ import {
 	saveLessons as localSaveLessons,
 	updateLesson as localUpdateLesson,
 	addLesson as localAddLesson,
-	deleteLesson as localDeleteLesson,
-	loadLessonProgress
+	deleteLesson as localDeleteLesson
 } from './lessonsData'
 
 /**
@@ -34,26 +33,38 @@ export interface LessonsService {
 
 /**
  * Sync local lessons to Supabase (migrates localStorage → Supabase)
+ * Only admins can sync lessons (lessons are global)
+ * Can be called manually by admins to migrate local lessons to Supabase
  */
-async function syncLocalLessonsToSupabase(): Promise<number> {
+export async function syncLocalLessonsToSupabase(): Promise<number> {
 	if (!isSupabaseConfigured()) return 0
 	
 	try {
 		const supabase = getSupabaseClient()
 		if (!supabase) return 0
 		
+		const user = getCurrentUser()
+		if (!user) return 0
+		
 		const { data: { session } } = await supabase.auth.getSession()
 		if (!session?.user?.id) return 0
+		
+		// Only admins can sync lessons
+		const { isAdmin } = await import('./authService')
+		if (!isAdmin(user)) {
+			console.warn('[lessonsService] Non-admin attempted to sync lessons')
+			return 0
+		}
 		
 		// Get all local lessons
 		const localLessons = localLoadLessons()
 		if (localLessons.length === 0) return 0
 		
 		// Get existing Supabase lessons (by custom_id to avoid duplicates)
+		// Lessons are global, so don't filter by created_by
 		const { data: existingData } = await supabase
 			.from('lessons')
-			.select('custom_id, composition_id')
-			.eq('created_by', session.user.id)
+			.select('custom_id')
 		
 		const existingCustomIds = new Set((existingData || []).map(l => l.custom_id).filter(Boolean))
 		
@@ -72,20 +83,21 @@ async function syncLocalLessonsToSupabase(): Promise<number> {
 				const { error } = await supabase
 					.from('lessons')
 					.insert({
-						created_by: session.user.id,
+						created_by: session.user.id, // Admin who created it
 						composition_id: local.compositionId || null,
 						lesson_number: lessonNumber,
 						title: local.title,
-						description: local.description || null,
+						description: local.description || null, // Make sure description is synced
 						difficulty: local.category, // Map category to difficulty
 						category: (local as any).topic || null, // Map topic to category field
-						subtitle: local.subtitle || null,
-						topic: (local as any).topic || null,
+						subtitle: local.subtitle || null, // Make sure subtitle is synced
+						topic: (local as any).topic || null, // Make sure topic is synced
 						custom_id: local.id // Store the custom ID like "lesson-1"
 					})
 				
 				if (!error) {
 					syncedCount++
+					console.log(`[lessonsService] Synced lesson "${local.title}" (${local.id}) to Supabase`)
 				} else {
 					console.warn(`[lessonsService] Error syncing lesson ${local.id}:`, error)
 				}
@@ -115,31 +127,16 @@ class LocalLessonsService implements LessonsService {
 				const supabase = getSupabaseClient()
 				if (!supabase) return localLoadLessons()
 				
-				const user = getCurrentUser()
-				if (!user) return localLoadLessons() // Not logged in, use local
-				
-				const { data: { session } } = await supabase.auth.getSession()
-				if (!session?.user?.id) return localLoadLessons()
-				
-				// Sync local lessons to Supabase (only once per session)
-				const syncKey = `lesson-sync-${session.user.id}`
-				if (!sessionStorage.getItem(syncKey)) {
-					const synced = await syncLocalLessonsToSupabase()
-					sessionStorage.setItem(syncKey, 'true')
-					if (synced > 0) {
-						console.log(`[lessonsService] Synced ${synced} lessons to Supabase`)
-					}
-				}
-				
-				// Load from Supabase
+				// Lessons are global - no authentication required to view them
+				// Load ALL lessons from Supabase (not filtered by user)
+				// This works even when logged out due to RLS policy "Anyone can read lessons"
 				const { data, error } = await supabase
 					.from('lessons')
 					.select('*')
-					.eq('created_by', session.user.id)
 					.order('lesson_number', { ascending: true })
 				
 				if (error) {
-					console.warn('[lessonsService] Supabase error, falling back to localStorage:', error)
+					console.warn('[lessonsService] Supabase error loading lessons, falling back to localStorage:', error)
 					return localLoadLessons()
 				}
 				
@@ -161,70 +158,16 @@ class LocalLessonsService implements LessonsService {
 					} as Lesson
 				})
 				
-				// Also load local lessons as backup/merge
-				const localLessons = localLoadLessons()
-				const supabaseCustomIds = new Set(supabaseLessons.map(l => l.id))
-				
-				// Merge: use Supabase as primary, but include any local that don't exist in Supabase
-				const localOnly = localLessons.filter(l => !supabaseCustomIds.has(l.id))
-				
-				if (localOnly.length > 0) {
-					console.log(`[lessonsService] Found ${localOnly.length} local lessons not in Supabase, merging...`)
-					// Try to sync these again
-					for (const local of localOnly) {
-						try {
-							const match = local.id.match(/lesson-(\d+)/)
-							const lessonNumber = match ? parseInt(match[1], 10) : 999
-							
-							const { error: insertError } = await supabase
-								.from('lessons')
-								.insert({
-									created_by: session.user.id,
-									composition_id: local.compositionId || null,
-									lesson_number: lessonNumber,
-									title: local.title,
-									description: local.description || null,
-									difficulty: local.category,
-									category: (local as any).topic || null,
-									subtitle: local.subtitle || null,
-									topic: (local as any).topic || null,
-									custom_id: local.id
-								})
-							if (!insertError) {
-								console.log(`[lessonsService] Synced "${local.title}" to Supabase`)
-							}
-						} catch (err) {
-							console.warn(`[lessonsService] Failed to sync "${local.title}":`, err)
-						}
-					}
-					// Reload from Supabase after sync
-					const { data: reloadData } = await supabase
-						.from('lessons')
-						.select('*')
-						.eq('created_by', session.user.id)
-						.order('lesson_number', { ascending: true })
-					
-					if (reloadData) {
-						return (reloadData || []).map(item => {
-							const customId = item.custom_id || `lesson-${item.lesson_number}`
-							return {
-								id: customId,
-								title: item.title,
-								subtitle: item.subtitle || '',
-								topic: item.topic || item.category || '',
-								description: item.description || '',
-								category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
-								compositionId: item.composition_id,
-								unlocked: false,
-								completed: false
-							} as Lesson
-						})
-					}
+				// If we have Supabase lessons, use them (they're global)
+				if (supabaseLessons.length > 0) {
+					return supabaseLessons
 				}
 				
-				return supabaseLessons
+				// Fallback to local if Supabase is empty
+				return localLoadLessons()
 			} catch (error) {
 				console.error('[lessonsService] Error loading from Supabase:', error)
+				// Always fallback to localStorage on error
 				return localLoadLessons()
 			}
 		}
@@ -233,6 +176,7 @@ class LocalLessonsService implements LessonsService {
 	}
 
 	async saveLessons(lessons: Lesson[]): Promise<void> {
+		// Only admins can save lessons (lessons are global)
 		if (isSupabaseConfigured()) {
 			try {
 				const supabase = getSupabaseClient()
@@ -253,12 +197,20 @@ class LocalLessonsService implements LessonsService {
 					return
 				}
 				
-				// Delete all existing lessons for this user, then insert new ones
-				// This is simpler than trying to match and update individually
+				// Admin check - only admins can save global lessons
+				const { isAdmin } = await import('./authService')
+				if (!isAdmin(user)) {
+					console.warn('[lessonsService] Non-admin user attempted to save lessons')
+					localSaveLessons(lessons)
+					return
+				}
+				
+				// Delete all existing lessons, then insert new ones
+				// Lessons are global, so we delete all (admin-only operation)
 				await supabase
 					.from('lessons')
 					.delete()
-					.eq('created_by', session.user.id)
+					.neq('id', '00000000-0000-0000-0000-000000000000') // Delete all (using impossible UUID)
 				
 				// Insert all lessons
 				const insertData = lessons.map(lesson => {
@@ -305,6 +257,7 @@ class LocalLessonsService implements LessonsService {
 	}
 
 	async updateLesson(lessonId: string, updates: Partial<Lesson>): Promise<boolean> {
+		// Only admins can update lessons (lessons are global)
 		// Update local first
 		const localResult = localUpdateLesson(lessonId, updates)
 		
@@ -319,7 +272,14 @@ class LocalLessonsService implements LessonsService {
 				const { data: { session } } = await supabase.auth.getSession()
 				if (!session?.user?.id) return localResult
 				
-				// Update in Supabase using custom_id
+				// Admin check - only admins can update global lessons
+				const { isAdmin } = await import('./authService')
+				if (!isAdmin(user)) {
+					console.warn('[lessonsService] Non-admin user attempted to update lesson')
+					return localResult
+				}
+				
+				// Update in Supabase using custom_id (lessons are global, no user filter needed)
 				const updateData: any = {}
 				if (updates.title !== undefined) updateData.title = updates.title
 				if (updates.subtitle !== undefined) updateData.subtitle = updates.subtitle
@@ -342,8 +302,7 @@ class LocalLessonsService implements LessonsService {
 				const { error } = await supabase
 					.from('lessons')
 					.update(updateData)
-					.eq('custom_id', lessonId)
-					.eq('created_by', session.user.id)
+					.eq('custom_id', lessonId) // Lessons are global, no user filter
 				
 				if (error) {
 					console.warn('[lessonsService] Supabase error updating lesson, using local result:', error)
@@ -357,6 +316,7 @@ class LocalLessonsService implements LessonsService {
 	}
 
 	async addLesson(lesson: Omit<Lesson, 'id'>): Promise<Lesson> {
+		// Only admins can add lessons (lessons are global)
 		// Add to local first
 		const localLesson = localAddLesson(lesson)
 		
@@ -371,6 +331,13 @@ class LocalLessonsService implements LessonsService {
 				const { data: { session } } = await supabase.auth.getSession()
 				if (!session?.user?.id) return localLesson
 				
+				// Admin check - only admins can add global lessons
+				const { isAdmin } = await import('./authService')
+				if (!isAdmin(user)) {
+					console.warn('[lessonsService] Non-admin user attempted to add lesson')
+					return localLesson
+				}
+				
 				// Extract lesson number from id like "lesson-1" -> 1
 				const match = localLesson.id.match(/lesson-(\d+)/)
 				const lessonNumber = match ? parseInt(match[1], 10) : 1
@@ -378,7 +345,7 @@ class LocalLessonsService implements LessonsService {
 				const { error } = await supabase
 					.from('lessons')
 					.insert({
-						created_by: session.user.id,
+						created_by: session.user.id, // Admin who created it
 						composition_id: lesson.compositionId || null,
 						lesson_number: lessonNumber,
 						title: localLesson.title,
@@ -402,6 +369,7 @@ class LocalLessonsService implements LessonsService {
 	}
 
 	async deleteLesson(lessonId: string): Promise<boolean> {
+		// Only admins can delete lessons (lessons are global)
 		// Delete from local first
 		const localResult = localDeleteLesson(lessonId)
 		
@@ -416,12 +384,18 @@ class LocalLessonsService implements LessonsService {
 				const { data: { session } } = await supabase.auth.getSession()
 				if (!session?.user?.id) return localResult
 				
-				// Delete from Supabase using custom_id
+				// Admin check - only admins can delete global lessons
+				const { isAdmin } = await import('./authService')
+				if (!isAdmin(user)) {
+					console.warn('[lessonsService] Non-admin user attempted to delete lesson')
+					return localResult
+				}
+				
+				// Delete from Supabase using custom_id (lessons are global, no user filter)
 				const { error } = await supabase
 					.from('lessons')
 					.delete()
 					.eq('custom_id', lessonId)
-					.eq('created_by', session.user.id)
 				
 				if (error) {
 					console.warn('[lessonsService] Supabase error deleting lesson, using local result:', error)
@@ -435,14 +409,15 @@ class LocalLessonsService implements LessonsService {
 	}
 
 	async getLessonsWithProgress(): Promise<Lesson[]> {
-		// Load lessons (from Supabase if available)
+		// Load lessons (from Supabase if available - global, no auth required)
 		let lessons = await this.loadLessons()
 		
 		// Extra safety: filter out any dummy lessons that might still exist
 		lessons = lessons.filter(lesson => lesson.compositionId !== null)
 		
-		// Add progress and unlock status (progress is still stored in localStorage)
-		const progress = loadLessonProgress()
+		// Load progress (user-specific, requires auth, falls back to localStorage)
+		const { loadLessonProgress } = await import('./lessonProgressService')
+		const progress = await loadLessonProgress()
 		
 		// Sort lessons by their lesson number
 		const sortedLessons = [...lessons].sort((a, b) => {

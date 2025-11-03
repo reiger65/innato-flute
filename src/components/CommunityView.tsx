@@ -451,7 +451,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 										</p>
 									</div>
 									<div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-										{userIsAdmin && (
+										{currentUser && userIsAdmin && (
 											<button
 												className="community-favorite-btn"
 												onClick={(e) => {

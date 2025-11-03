@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { loadLessons, updateLesson, deleteLesson, reorderLessons, type Lesson } from '../lib/lessonsService'
+import { loadLessons, updateLesson, deleteLesson, reorderLessons, syncLocalLessonsToSupabase, type Lesson } from '../lib/lessonsService'
 import { getComposition } from '../lib/compositionService'
+import { getCurrentUser, isAdmin } from '../lib/authService'
 
 interface ManageLessonsModalProps {
 	isOpen: boolean
@@ -43,6 +44,24 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	const loadLessonsData = async () => {
 		setLoading(true)
 		try {
+			// If admin is logged in, sync local lessons to Supabase first
+			const currentUser = getCurrentUser()
+			if (currentUser && isAdmin(currentUser)) {
+				const syncKey = `lesson-sync-admin-${currentUser.id}`
+				if (!sessionStorage.getItem(syncKey)) {
+					try {
+						const synced = await syncLocalLessonsToSupabase()
+						if (synced > 0) {
+							console.log(`[ManageLessonsModal] Synced ${synced} local lessons to Supabase`)
+							onShowToast?.(`Synced ${synced} local lesson(s) to Supabase`, 'success')
+						}
+						sessionStorage.setItem(syncKey, 'true')
+					} catch (error) {
+						console.error('Error syncing lessons:', error)
+					}
+				}
+			}
+			
 			const loadedLessons = await loadLessons()
 			// Sort lessons by lesson number (lesson-1, lesson-2, etc.) so newest is last
 			const getLessonNumber = (id: string): number => {

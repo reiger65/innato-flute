@@ -1220,7 +1220,7 @@ export default function App() {
 							{/* Section header */}
 							<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
 								<div className="section-title" style={{ margin: 0 }}>All Lessons</div>
-								{isAdmin(currentUser) && (
+								{currentUser && isAdmin(currentUser) && (
 									<button 
 										className="btn-sm"
 										onClick={() => setShowManageLessonsModal(true)}
