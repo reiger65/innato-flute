@@ -1104,7 +1104,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			)}
 
 			{/* Play Button - Above New, Save, Open */}
-			<div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px', marginBottom: '12px' }}>
+			<div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px', marginBottom: '8px' }}>
 				<button
 					className={`tab ${isPlaying ? 'is-active' : ''}`} 
 					onClick={handlePlay}
@@ -1131,7 +1131,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				</button>
 			</div>
 			{/* Composition Management - Below the composition */}
-			<div style={{ marginBottom: '12px' }}>
+			<div style={{ marginBottom: '8px' }}>
 				<div className="tabs" style={{ marginBottom: 0 }}>
 				<button 
 						className="btn-sm tab" 
