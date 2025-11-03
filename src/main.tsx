@@ -6,12 +6,7 @@ import App from './App.tsx'
 
 // iOS Audio Unlock - Must be called DIRECTLY from user gesture
 // iOS requires audio context resume to be called synchronously in the event handler
-let audioUnlocked = false
-
 const unlockAudioOnUserGesture = () => {
-	// Only unlock once
-	if (audioUnlocked) return
-	
 	// On iOS, we MUST do everything synchronously in the event handler
 	try {
 		// Initialize audio context immediately
@@ -34,18 +29,23 @@ const unlockAudioOnUserGesture = () => {
 		if (testContext.state === 'suspended') {
 			testContext.resume().then(() => {
 				console.log('iOS Audio unlocked successfully')
-				audioUnlocked = true
 				testContext.close()
 			}).catch(() => {
 				// Will unlock on next interaction
 			})
 		} else {
-			audioUnlocked = true
 			testContext.close()
 		}
 		
-		// Also initialize the main audio player
-		simplePlayer.initAudio().catch(() => {
+		// Also initialize and resume the main audio player
+		simplePlayer.initAudio().then(() => {
+			const audioContext = simplePlayer.getAudioContext()
+			if (audioContext && audioContext.state === 'suspended') {
+				audioContext.resume().catch(() => {
+					// Will try again on next interaction
+				})
+			}
+		}).catch(() => {
 			// Will try again on next interaction
 		})
 	} catch (error) {
@@ -54,32 +54,37 @@ const unlockAudioOnUserGesture = () => {
 	}
 }
 
-// Listen for FIRST user interaction on iOS
+// Listen for user interactions on iOS
 // Use multiple events to catch any type of interaction
+// Don't use 'once: true' - iOS audio can get suspended again, so we need to be able to re-unlock
 const events = ['touchstart', 'touchend', 'click', 'mousedown']
-events.forEach(eventType => {
-	document.addEventListener(eventType, unlockAudioOnUserGesture, { 
-		once: true, 
-		passive: true,
-		capture: true // Capture phase for better iOS support
+const attachAudioUnlockListeners = () => {
+	events.forEach(eventType => {
+		document.addEventListener(eventType, unlockAudioOnUserGesture, { 
+			passive: true,
+			capture: true // Capture phase for better iOS support
+		})
 	})
-})
+}
+
+// Attach listeners initially
+attachAudioUnlockListeners()
 
 // Also try to unlock when app becomes visible (handles some edge cases)
 document.addEventListener('visibilitychange', () => {
-	if (!audioUnlocked && !document.hidden) {
-		// When tab becomes visible, try one more time
+	if (!document.hidden) {
+		// When tab becomes visible, try to resume audio context
 		setTimeout(() => {
-			if (!audioUnlocked) {
-				// Re-attach listeners if still not unlocked
-				events.forEach(eventType => {
-					document.addEventListener(eventType, unlockAudioOnUserGesture, { 
-						once: true, 
-						passive: true,
-						capture: true
+			simplePlayer.initAudio().then(() => {
+				const audioContext = simplePlayer.getAudioContext()
+				if (audioContext && audioContext.state === 'suspended') {
+					audioContext.resume().catch(() => {
+						// Will unlock on next user interaction
 					})
-				})
-			}
+				}
+			}).catch(() => {
+				// Will unlock on next user interaction
+			})
 		}, 100)
 	}
 })

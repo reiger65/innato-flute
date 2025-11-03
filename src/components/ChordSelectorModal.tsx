@@ -25,7 +25,20 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 	const handleChordClick = async (chordId: number) => {
 		// Play the chord (but don't select it - selection is done via the circle button)
 		try {
+			// Initialize audio - on iOS this must be called directly from the click handler
 			await simplePlayer.initAudio()
+			
+			// Ensure audio context is resumed (critical for iOS)
+			const audioContext = simplePlayer.getAudioContext()
+			if (audioContext && audioContext.state === 'suspended') {
+				// On iOS, resume() must be called synchronously in the event handler
+				await audioContext.resume()
+				// Sometimes iOS needs a second resume call
+				if (audioContext.state === 'suspended') {
+					await audioContext.resume()
+				}
+			}
+			
 			const fingering = getFingeringForChord(chordId)
 			const openStates = fingeringToOpenStates(fingering)
 			const notes = getNotesFromOpenStates(openStates, fluteType)
