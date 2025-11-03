@@ -110,7 +110,7 @@ select.btn-sm:active {
 .phone {
 	max-width: 428px;
 	margin: 0 auto;
-	margin-top: 60px;
+	margin-top: 24px;
 	background: var(--color-white);
 	border-radius: var(--radius-2);
 	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);

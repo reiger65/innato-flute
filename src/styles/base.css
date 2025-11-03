@@ -4,7 +4,7 @@
 	min-height: 100dvh;
 	display: flex;
 	flex-direction: column;
-	padding: var(--space-4);
+	padding: var(--space-2) var(--space-4) var(--space-4) var(--space-4);
 	background: var(--color-white);
 }
 
