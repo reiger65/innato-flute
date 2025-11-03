@@ -889,7 +889,8 @@ select.btn-sm:active {
 	display: flex;
 	gap: var(--space-1);
 	justify-content: center;
-	margin-bottom: var(--space-2);
+	margin-bottom: -4px;
+	margin-top: var(--space-2);
 }
 
 .composer-main-card {
@@ -962,9 +963,22 @@ select.btn-sm:active {
 	transition: all 0.2s ease;
 }
 
+@keyframes dotJump {
+	0% {
+		transform: translateY(0) scale(1);
+	}
+	50% {
+		transform: translateY(-4px) scale(1.25);
+	}
+	100% {
+		transform: translateY(0) scale(1.2);
+	}
+}
+
 .composer-rhythm-dot.is-active {
 	background: var(--color-black);
 	transform: scale(1.2);
+	animation: dotJump 0.25s ease-out;
 }
 
 /* Timeline */

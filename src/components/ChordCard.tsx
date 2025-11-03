@@ -144,7 +144,15 @@ export function ChordCard({
 		<div 
 			className={`chord-card${fluid ? ' chord-card--fluid' : ''}${isClickable ? ' chord-card--clickable' : ''}`}
 			onClick={isClickable ? handleClick : undefined}
+			onTouchEnd={(e) => {
+				// iOS touch event handler - ensure clicks work on touch devices
+				if (isClickable) {
+					e.preventDefault()
+					handleClick()
+				}
+			}}
 			data-chord-active={false}
+			style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
 		>
 			<svg
 				className="fingering"

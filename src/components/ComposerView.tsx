@@ -532,6 +532,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	 */
 		const handlePlay = async () => {
 		if (isPlaying) {
+			// Stop all sounds immediately when stopping playback
+			simplePlayer.stopAll()
 			// Stop metronome immediately when stopping playback
 			isPlayingMetronomeRef.current = false
 			if (metronomeIntervalRef.current !== null) {
@@ -540,6 +542,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			}
 			setIsPlaying(false)
 			isPlayingRef.current = false
+			// Keep selectedChordIndex as is (it should already be set to the current playing chord)
+			// Only clear playingChordIndex since playback is stopped
 			setPlayingChordIndex(null)
 			setPlayingDotIndex(null)
 			return
@@ -550,6 +554,11 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 		setIsPlaying(true)
 		isPlayingRef.current = true
 
+		// Ensure a chord is selected when starting playback
+		if (selectedChordIndex === null) {
+			setSelectedChordIndex(0)
+		}
+
 		try {
 			await simplePlayer.initAudio()
 			
@@ -557,7 +566,11 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			const beatDurationSeconds = 60 / tempo // One beat in seconds
 			
 			for (let i = 0; i < chords.length; i++) {
-				if (!isPlayingRef.current) break
+				if (!isPlayingRef.current) {
+					// Stop all sounds if playback was interrupted
+					simplePlayer.stopAll()
+					break
+				}
 
 				const chord = chords[i]
 				setSelectedChordIndex(i)
@@ -590,7 +603,11 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 
 				// Animate through each dot for this chord
 				for (let dotIndex = 0; dotIndex < chord.beats; dotIndex++) {
-					if (!isPlayingRef.current) break
+					if (!isPlayingRef.current) {
+						// Stop all sounds if playback was interrupted
+						simplePlayer.stopAll()
+						break
+					}
 					
 					setPlayingDotIndex(dotIndex)
 					await new Promise(resolve => setTimeout(resolve, beatDurationMs))
@@ -599,6 +616,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				setPlayingDotIndex(null)
 			}
 
+			// Stop all sounds when playback finishes
+			simplePlayer.stopAll()
 			// Stop metronome immediately when playback finishes (before setting isPlaying to false)
 			// This prevents the metronome from playing one extra tick
 			isPlayingMetronomeRef.current = false
@@ -610,11 +629,22 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			// Set isPlaying to false after stopping metronome to ensure useEffect doesn't trigger another tick
 			setIsPlaying(false)
 			isPlayingRef.current = false
-			setSelectedChordIndex(null)
+			// Jump back to the first card after playback finishes
+			setSelectedChordIndex(0)
 			setPlayingChordIndex(null)
 			setPlayingDotIndex(null)
+			
+			// Scroll to the first card
+			if (sequenceContainerRef.current && chords.length > 0) {
+				const cardElements = sequenceContainerRef.current.querySelectorAll('.composer-timeline-item')
+				if (cardElements[0]) {
+					cardElements[0].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+				}
+			}
 		} catch (error) {
 			console.error('Error playing composition:', error)
+			// Stop all sounds on error
+			simplePlayer.stopAll()
 			// Stop metronome on error
 			isPlayingMetronomeRef.current = false
 			if (metronomeIntervalRef.current !== null) {
@@ -623,9 +653,18 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			}
 			setIsPlaying(false)
 			isPlayingRef.current = false
-			setSelectedChordIndex(null)
+			// Jump back to the first card on error as well
+			setSelectedChordIndex(0)
 			setPlayingChordIndex(null)
 			setPlayingDotIndex(null)
+			
+			// Scroll to the first card
+			if (sequenceContainerRef.current && chords.length > 0) {
+				const cardElements = sequenceContainerRef.current.querySelectorAll('.composer-timeline-item')
+				if (cardElements[0]) {
+					cardElements[0].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+				}
+			}
 		}
 	}
 
@@ -939,58 +978,66 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 					{/* Main Large Card with Rhythm Dots Above */}
 					<div className="composer-main-card-container">
 						{/* Rhythm Dots Above Main Card */}
-						{selectedChordIndex !== null && (
-							<div className="composer-main-rhythm-dots">
-								{Array.from({ length: chords[selectedChordIndex].beats }).map((_, dotIndex) => {
-									const isActive = playingChordIndex === selectedChordIndex && playingDotIndex === dotIndex
-									return (
-										<span 
-											key={dotIndex} 
-											className={`composer-rhythm-dot ${isActive ? 'is-active' : ''}`}
-										></span>
-									)
-								})}
-							</div>
-						)}
+						{(() => {
+							// Use playingChordIndex during playback, otherwise use selectedChordIndex
+							const activeIndex = playingChordIndex !== null ? playingChordIndex : selectedChordIndex
+							return activeIndex !== null && activeIndex < chords.length ? (
+								<div className="composer-main-rhythm-dots">
+									{Array.from({ length: chords[activeIndex].beats }).map((_, dotIndex) => {
+										const isActive = playingChordIndex === activeIndex && playingDotIndex === dotIndex
+										return (
+											<span 
+												key={dotIndex} 
+												className={`composer-rhythm-dot ${isActive ? 'is-active' : ''}`}
+											></span>
+										)
+									})}
+								</div>
+							) : null
+						})()}
 
 						{/* Main Large Chord Card - Always visible */}
 						<div className="composer-main-card">
-							{selectedChordIndex !== null ? (
-								chords[selectedChordIndex].chordId === null ? (
-									<div className="composer-main-rest-symbol">
-										<svg 
-											viewBox="0 0 120 120" 
-											width="180" 
-											height="180"
-											style={{ pointerEvents: 'none' }}
-										>
-											<circle 
-												cx="60" 
-												cy="60" 
-												r="15"
-												fill="none"
-												stroke="var(--color-black)"
-												strokeWidth="2"
-											/>
-										</svg>
-									</div>
+							{(() => {
+								// Use playingChordIndex during playback, otherwise use selectedChordIndex
+								const activeIndex = playingChordIndex !== null ? playingChordIndex : selectedChordIndex
+								return activeIndex !== null && activeIndex < chords.length ? (
+									chords[activeIndex].chordId === null ? (
+										<div className="composer-main-rest-symbol">
+											<svg 
+												viewBox="0 0 120 120" 
+												width="180" 
+												height="180"
+												style={{ pointerEvents: 'none' }}
+											>
+												<circle 
+													cx="60" 
+													cy="60" 
+													r="15"
+													fill="none"
+													stroke="var(--color-black)"
+													strokeWidth="2"
+												/>
+											</svg>
+										</div>
+									) : (
+										<ChordCard
+											value={String(chords[activeIndex].chordId)}
+											openStates={chords[activeIndex].openStates}
+											fluteType={fluteType}
+											onPlay={() => handleChordClick(chords[activeIndex])}
+											hideNotes={false}
+											hideChordNumber={false}
+											fluid={true}
+											pixelSize={180}
+										/>
+									)
 								) : (
-									<ChordCard
-										value={String(chords[selectedChordIndex].chordId)}
-										openStates={chords[selectedChordIndex].openStates}
-										fluteType={fluteType}
-										onPlay={() => handleChordClick(chords[selectedChordIndex])}
-										hideNotes={false}
-										hideChordNumber={false}
-										fluid={true}
-										pixelSize={180}
-									/>
+									<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
+										<span style={{ fontSize: '14px', color: 'var(--color-black)' }}>Select a chord</span>
+									</div>
 								)
-							) : (
-								<div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
-									<span style={{ fontSize: '14px', color: 'var(--color-black)' }}>Select a chord</span>
-								</div>
-							)}
+							})()}
 						</div>
 					</div>
 
@@ -1011,6 +1058,16 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 										if (draggedIndex === null) {
 											setSelectedChordIndex(index)
 											handleChordClick(chord)
+										}
+									}}
+									onTouchStart={async (e) => {
+										// iOS touch event handler - ensure audio plays on tap
+										// Must initialize audio synchronously in touch handler for iOS
+										if (draggedIndex === null && chord.chordId !== null) {
+											e.preventDefault()
+											setSelectedChordIndex(index)
+											// Call handleChordClick directly to ensure audio initialization happens in touch handler
+											await handleChordClick(chord)
 										}
 									}}
 							>
@@ -1052,7 +1109,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 											value={String(chord.chordId)}
 											openStates={chord.openStates}
 											fluteType={fluteType}
-											onPlay={() => handleChordClick(chord)}
+											onClick={() => handleChordClick(chord)}
 											hideNotes={false}
 											hideChordNumber={false}
 											fluid={true}
