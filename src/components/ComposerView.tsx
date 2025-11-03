@@ -67,6 +67,53 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	const metronomeIntervalRef = useRef<number | null>(null)
 	const isPlayingMetronomeRef = useRef(false)
 	const sequenceContainerRef = useRef<HTMLDivElement | null>(null)
+	const DRAFT_STORAGE_KEY = 'innato-composer-draft'
+	const isInitialMountRef = useRef(true) // Track if this is the initial mount
+
+	// Load draft composition on mount (if no composition was explicitly loaded)
+	useEffect(() => {
+		if (isInitialMountRef.current) {
+			isInitialMountRef.current = false
+			
+			// Only load draft if no composition was explicitly loaded
+			if (loadedCompositionId === null && chords.length === 0) {
+				try {
+					const draftData = localStorage.getItem(DRAFT_STORAGE_KEY)
+					if (draftData) {
+						const draft = JSON.parse(draftData)
+						if (draft.chords && draft.chords.length > 0) {
+							setChords(draft.chords)
+							setTempo(draft.tempo || 70)
+							setTimeSignature(draft.timeSignature || '4/4')
+							console.log('[ComposerView] Restored draft composition from localStorage')
+						}
+					}
+				} catch (error) {
+					console.error('[ComposerView] Error loading draft:', error)
+				}
+			}
+		}
+	}, [])
+
+	// Auto-save draft to localStorage whenever composition changes
+	useEffect(() => {
+		// Don't save draft if a saved composition is loaded (only save drafts for unsaved work)
+		if (loadedCompositionId === null && chords.length > 0) {
+			try {
+				const draft = {
+					chords,
+					tempo,
+					timeSignature
+				}
+				localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
+			} catch (error) {
+				console.error('[ComposerView] Error saving draft:', error)
+			}
+		} else if (loadedCompositionId === null && chords.length === 0) {
+			// Clear draft if composition is empty
+			localStorage.removeItem(DRAFT_STORAGE_KEY)
+		}
+	}, [chords, tempo, timeSignature, loadedCompositionId])
 
 	// Load compositions and progressions on mount and when refresh triggers
 	useEffect(() => {
@@ -289,6 +336,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 					setLoadedCompositionName(saveModalName.trim()) // Update the displayed name
 			setShowSaveModal(false)
 					setOpenModalRefresh(prev => prev + 1) // Refresh compositions list
+					// Clear draft since this is now a saved composition
+					localStorage.removeItem(DRAFT_STORAGE_KEY)
 					onShowToast?.(`Composition "${saveModalName.trim()}" updated successfully!`, 'success')
 				} else {
 					onShowToast?.('Error updating composition. Please try again.', 'error')
@@ -313,6 +362,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				setLoadedCompositionName(saved.name) // Track the saved composition name for display
 				setShowSaveModal(false)
 				setOpenModalRefresh(prev => prev + 1) // Refresh compositions list
+				// Clear draft since this is now a saved composition
+				localStorage.removeItem(DRAFT_STORAGE_KEY)
 				onShowToast?.(`Composition "${saved.name}" saved successfully!`, 'success')
 			}
 		} catch (error) {
@@ -706,6 +757,9 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			clearInterval(metronomeIntervalRef.current)
 			metronomeIntervalRef.current = null
 		}
+		
+		// Clear draft from localStorage
+		localStorage.removeItem(DRAFT_STORAGE_KEY)
 	}
 
 	/**
