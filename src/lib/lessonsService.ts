@@ -71,10 +71,12 @@ class LocalLessonsService implements LessonsService {
 				.map(id => lessonMap.get(id))
 				.filter((lesson): lesson is Lesson => lesson !== undefined)
 			
-			// Renumber sequential IDs
+			// Renumber sequential IDs and auto-generate titles
 			const renumberedLessons = reorderedLessons.map((lesson, index) => ({
 				...lesson,
-				id: `lesson-${index + 1}`
+				id: `lesson-${index + 1}`,
+				title: `Lesson ${index + 1}`, // Auto-generate title based on position
+				subtitle: lesson.subtitle || '' // Preserve subtitle
 			}))
 			
 			await this.saveLessons(renumberedLessons)

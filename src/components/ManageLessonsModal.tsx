@@ -14,6 +14,8 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	const [loading, setLoading] = useState(false)
 	const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
 	const [editTitle, setEditTitle] = useState('')
+	const [editSubtitle, setEditSubtitle] = useState('')
+	const [editTopic, setEditTopic] = useState('')
 	const [editDescription, setEditDescription] = useState('')
 	const [editCategory, setEditCategory] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
@@ -60,7 +62,10 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 
 	const handleEdit = (lesson: Lesson) => {
 		setEditingLesson(lesson)
-		setEditTitle(lesson.title)
+		// Don't allow editing title - it's auto-generated based on position
+		setEditTitle(lesson.title) // Show current title but it won't be editable
+		setEditSubtitle(lesson.subtitle || '')
+		setEditTopic((lesson as any).topic || '')
 		setEditDescription(lesson.description)
 		setEditCategory(lesson.category)
 	}
@@ -70,8 +75,15 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 
 		setLoading(true)
 		try {
+			// Title is auto-generated based on position, so we don't update it
+			// Find the current index of this lesson to generate the correct title
+			const currentIndex = lessons.findIndex(l => l.id === editingLesson.id)
+			const autoTitle = `Lesson ${currentIndex + 1}`
+			
 			await updateLesson(editingLesson.id, {
-				title: editTitle.trim(),
+				title: autoTitle, // Always use auto-generated title
+				subtitle: editSubtitle.trim(),
+				topic: editTopic.trim(),
 				description: editDescription.trim(),
 				category: editCategory
 			})
@@ -89,6 +101,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	const handleCancelEdit = () => {
 		setEditingLesson(null)
 		setEditTitle('')
+		setEditSubtitle('')
 		setEditDescription('')
 		setEditCategory('beginner')
 	}
@@ -283,17 +296,44 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 										<div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
 											<div>
 												<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
-													Title *
+													Title (Auto-generated)
 												</label>
 												<input
 													type="text"
 													value={editTitle}
-													onChange={(e) => setEditTitle(e.target.value)}
+													readOnly
 													className="modal-input"
-													required
-													autoFocus
+													style={{ backgroundColor: 'rgba(0, 0, 0, 0.05)', cursor: 'not-allowed' }}
+													disabled
+												/>
+												<p style={{ fontSize: 'var(--font-size-xs)', color: 'rgba(0, 0, 0, 0.5)', marginTop: 'var(--space-1)' }}>
+													Lesson titles are automatically generated based on their position in the list.
+												</p>
+											</div>
+											<div>
+												<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+													Subtitle
+												</label>
+												<input
+													type="text"
+													value={editSubtitle}
+													onChange={(e) => setEditSubtitle(e.target.value)}
+													className="modal-input"
+													placeholder="e.g., Major Scales, Basic Progressions"
 												/>
 											</div>
+						<div>
+							<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+								Category (topic)
+							</label>
+							<input
+								type="text"
+								value={editTopic}
+								onChange={(e) => setEditTopic(e.target.value)}
+								className="modal-input"
+								placeholder="e.g., Progressions, Melodies, Rhythm"
+							/>
+						</div>
 											<div>
 												<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
 													Description
@@ -325,7 +365,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 												<button
 													className="btn-sm"
 													onClick={handleSaveEdit}
-													disabled={loading || !editTitle.trim()}
+													disabled={loading}
 												>
 													Save
 												</button>
@@ -373,15 +413,35 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 											{/* Lesson info */}
 											<div style={{ flex: 1, minWidth: 0 }}>
 												<div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-													<h3 style={{ 
-														margin: 0, 
-														fontSize: 'var(--font-size-base)', 
-														fontWeight: 'var(--font-weight-semibold)',
-														flex: 1,
-														minWidth: 0
-													}}>
-														{lesson.title}
-													</h3>
+													<div style={{ flex: 1, minWidth: 0 }}>
+														<h3 style={{ 
+															margin: 0, 
+															fontSize: 'var(--font-size-base)', 
+															fontWeight: 'var(--font-weight-semibold)',
+														}}>
+															{lesson.title}
+														</h3>
+														{lesson.subtitle && (
+															<p style={{ 
+																margin: '4px 0 0 0',
+																fontSize: 'var(--font-size-sm)', 
+																color: 'rgba(0, 0, 0, 0.7)',
+																fontWeight: 'var(--font-weight-bold)'
+															}}>
+																{lesson.subtitle}
+															</p>
+														)}
+							{(lesson as any).topic && (
+								<p style={{ 
+									margin: '2px 0 0 0',
+									fontSize: 'var(--font-size-xs)', 
+									color: 'rgba(0, 0, 0, 0.8)',
+									fontWeight: 'var(--font-weight-semibold)'
+								}}>
+									{(lesson as any).topic}
+								</p>
+							)}
+													</div>
 													<span style={{
 														padding: '2px 8px',
 														borderRadius: 'var(--radius-2)',

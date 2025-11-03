@@ -9,7 +9,9 @@ import { loadCompositions } from './compositionService'
 
 export interface Lesson {
 	id: string
-	title: string
+	title: string // Auto-generated: "Lesson 1", "Lesson 2", etc.
+	subtitle: string // User-defined subtitle (e.g., "Major Scales", "Basic Progressions")
+	topic: string // User-defined category/topic (e.g., "Progressions", "Melodies", "Rhythm")
 	description: string
 	category: 'beginner' | 'intermediate' | 'advanced'
 	compositionId: string | null // ID of the saved composition to use for this lesson
@@ -29,8 +31,14 @@ export function loadLessons(): Lesson[] {
 		const data = localStorage.getItem(STORAGE_KEY)
 		if (data) {
 			const lessons = JSON.parse(data)
+			// Ensure all lessons have subtitle and topic fields (migration for existing lessons)
+			const migratedLessons = lessons.map((lesson: Lesson) => ({
+				...lesson,
+				subtitle: (lesson as any).subtitle || '',
+				topic: (lesson as any).topic || ''
+			}))
 			// Force migration by checking and fixing IDs
-			const needsMigration = lessons.some((lesson: Lesson) => {
+			const needsMigration = migratedLessons.some((lesson: Lesson) => {
 				const match = lesson.id.match(/^lesson-(\d+)$/)
 				if (match) {
 					const num = parseInt(match[1], 10)
@@ -40,9 +48,14 @@ export function loadLessons(): Lesson[] {
 			})
 			if (needsMigration) {
 				// Trigger migration immediately
-				return lessons
+				return migratedLessons
 			}
-			return lessons
+			// Save migrated lessons if subtitle/topic field was missing
+			const needsFieldMigration = lessons.some((lesson: any) => !('subtitle' in lesson) || !('topic' in lesson))
+			if (needsFieldMigration) {
+				saveLessons(migratedLessons)
+			}
+			return migratedLessons
 		}
 		// If no lessons stored, return empty array - lessons will be created from compositions
 		return []
@@ -91,6 +104,7 @@ export function updateLesson(lessonId: string, updates: Partial<Lesson>): boolea
 
 /**
  * Add a new lesson
+ * Auto-generates title based on position: "Lesson 1", "Lesson 2", etc.
  */
 export function addLesson(lesson: Omit<Lesson, 'id'>): Lesson {
 	const lessons = loadLessons()
@@ -109,7 +123,10 @@ export function addLesson(lesson: Omit<Lesson, 'id'>): Lesson {
 	const nextLessonNumber = maxLessonNumber + 1
 	const newLesson: Lesson = {
 		...lesson,
-		id: `lesson-${nextLessonNumber}`
+		id: `lesson-${nextLessonNumber}`,
+		title: `Lesson ${nextLessonNumber}`, // Auto-generate title based on position
+		subtitle: lesson.subtitle || '', // Preserve subtitle if provided, otherwise empty string
+		topic: (lesson as any).topic || ''
 	}
 	lessons.push(newLesson)
 	saveLessons(lessons)
@@ -118,13 +135,28 @@ export function addLesson(lesson: Omit<Lesson, 'id'>): Lesson {
 
 /**
  * Delete a lesson
+ * After deletion, renumbers remaining lessons and updates their titles
  */
 export function deleteLesson(lessonId: string): boolean {
 	try {
 		const lessons = loadLessons()
 		const filtered = lessons.filter(l => l.id !== lessonId)
-		saveLessons(filtered)
-		return filtered.length < lessons.length
+		
+		if (filtered.length >= lessons.length) {
+			return false // Lesson not found
+		}
+		
+		// Renumber lessons and update titles based on new positions
+		const renumberedLessons = filtered.map((lesson, index) => ({
+			...lesson,
+			id: `lesson-${index + 1}`,
+			title: `Lesson ${index + 1}`, // Auto-generate title based on position
+			subtitle: lesson.subtitle || '', // Preserve subtitle
+			topic: (lesson as any).topic || ''
+		}))
+		
+		saveLessons(renumberedLessons)
+		return true
 	} catch (error) {
 		console.error('Error deleting lesson:', error)
 		return false
@@ -261,10 +293,24 @@ export function getLessonsWithProgress(): Lesson[] {
 		return getLessonNumber(a.id) - getLessonNumber(b.id)
 	})
 	
-	return lessons.map((lesson, index) => {
+	// Update all lesson titles to match their position, then save
+	const updatedLessons = lessons.map((lesson, index) => ({
+		...lesson,
+		title: `Lesson ${index + 1}`, // Auto-generate title based on position
+		subtitle: lesson.subtitle || '', // Preserve subtitle
+		topic: (lesson as any).topic || ''
+	}))
+	
+	// Save updated titles if any changed
+	const titlesChanged = lessons.some((lesson, index) => lesson.title !== `Lesson ${index + 1}`)
+	if (titlesChanged) {
+		saveLessons(updatedLessons)
+	}
+	
+	return updatedLessons.map((lesson, index) => {
 		const completed = progress[lesson.id] === true
 		// Unlock if it's the first lesson, or if previous lesson is completed
-		const unlocked = index === 0 || (index > 0 && progress[lessons[index - 1].id] === true)
+		const unlocked = index === 0 || (index > 0 && progress[updatedLessons[index - 1].id] === true)
 		
 		return {
 			...lesson,
@@ -317,11 +363,13 @@ export async function assignCompositionsToLessons(): Promise<void> {
 			const existingLesson = existingLessonsByCompositionId.get(composition.id)
 			
 			if (existingLesson) {
-				// Update title if composition name changed, preserve progress and ID
+				// Preserve progress and ID, but update title to auto-generated format
 				const wasCompleted = progress[existingLesson.id] === true
 				return {
 					...existingLesson,
-					title: composition.name,
+					title: `Lesson ${index + 1}`, // Auto-generate title based on position
+				subtitle: existingLesson.subtitle || '', // Preserve subtitle if it exists
+				topic: (existingLesson as any).topic || '',
 					completed: wasCompleted
 				}
 			}
@@ -333,7 +381,9 @@ export async function assignCompositionsToLessons(): Promise<void> {
 			
 			return {
 				id: lessonId,
-				title: composition.name,
+				title: `Lesson ${index + 1}`, // Auto-generate title based on position
+				subtitle: '', // Empty subtitle by default
+			topic: '',
 				description: 'Practice this composition',
 				category: 'beginner' as const,
 				compositionId: composition.id,

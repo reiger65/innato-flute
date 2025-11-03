@@ -1296,13 +1296,28 @@ export default function App() {
 												</div>
 											)}
 											<h3 className="lesson-card-title">
-											{(() => {
-												// Remove any existing "Lesson X -" or "Lesson X-" prefix from title
-												const cleanTitle = lesson.title.replace(/^Lesson \d+[-\s:]+/i, '').trim()
-												// Return only the composition title, no lesson number
-												return cleanTitle || lesson.title
-											})()}
+												{lesson.title}
 											</h3>
+											{lesson.subtitle && (
+												<p style={{ 
+													margin: '4px 0 0 0',
+													fontSize: 'var(--font-size-sm)', 
+													color: 'rgba(0, 0, 0, 0.7)',
+													fontWeight: 'var(--font-weight-bold)'
+												}}>
+													{lesson.subtitle}
+												</p>
+											)}
+											{(lesson as any).topic && (
+												<p style={{ 
+													margin: '2px 0 0 0',
+													fontSize: 'var(--font-size-xs)', 
+													color: 'rgba(0, 0, 0, 0.8)',
+													fontWeight: 'var(--font-weight-semibold)'
+												}}>
+													{(lesson as any).topic}
+												</p>
+											)}
 											<p className="lesson-card-category">{lesson.category}</p>
 											<p className="lesson-card-description">{lesson.description}</p>
 										</div>

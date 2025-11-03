@@ -24,8 +24,8 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 	const [isLooping, setIsLooping] = useState(false)
 	const [playingChordIndex, setPlayingChordIndex] = useState<number | null>(null)
 	const [playingDotIndex, setPlayingDotIndex] = useState<number | null>(null)
-	const [pausedChordIndex, setPausedChordIndex] = useState<number | null>(null)
-	const [pausedDotIndex, setPausedDotIndex] = useState<number | null>(null)
+	const [, setPausedChordIndex] = useState<number | null>(null)
+	const [, setPausedDotIndex] = useState<number | null>(null)
 	const isPlayingRef = useRef(false)
 	const isPausedRef = useRef(false)
 	const isLoopingRef = useRef(false)
@@ -418,14 +418,18 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 				<div className="lesson-modal-header">
 					<div>
 						<h2 className="lesson-modal-title">
-							{(() => {
-								const lessonNumber = getLessonNumber(lesson.id)
-								// Remove any existing "Lesson X -" or "Lesson X-" prefix from title
-								const cleanTitle = lesson.title.replace(/^Lesson \d+[-\s:]+/i, '').trim()
-								// Lesson number and title
-								return `Lesson ${lessonNumber} - ${cleanTitle}`
-							})()}
+							{lesson.title}
 						</h2>
+						{lesson.subtitle && (
+							<p style={{ 
+								margin: '4px 0 0 0',
+								fontSize: 'var(--font-size-sm)', 
+								color: 'rgba(0, 0, 0, 0.7)',
+								fontWeight: 'var(--font-weight-bold)'
+							}}>
+								{lesson.subtitle}
+							</p>
+						)}
 						<div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-normal)', color: 'var(--color-black)', opacity: 0.7, marginTop: 'var(--space-1)' }}>
 							{composition.tempo} BPM • {composition.timeSignature} • {chords.length} {chords.length === 1 ? 'chord' : 'chords'}
 						</div>
