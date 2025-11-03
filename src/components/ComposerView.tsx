@@ -36,6 +36,8 @@ export interface ComposerViewRef {
 export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fluteType, tuning, favoriteChordIds = [], onToggleFavorite, onShowInfo, onShowToast }, ref) => {
 	const [chords, setChords] = useState<ComposerChord[]>([])
 	const [isPlaying, setIsPlaying] = useState(false)
+	const [isPaused, setIsPaused] = useState(false)
+	const [isLooping, setIsLooping] = useState(false)
 	const [tempo, setTempo] = useState(70)
 	const [timeSignature, setTimeSignature] = useState<'3/4' | '4/4'>('4/4')
 	const [metronomeEnabled, setMetronomeEnabled] = useState(false)
@@ -45,6 +47,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	const [playingDotIndex, setPlayingDotIndex] = useState<number | null>(null)
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+	const [pausedChordIndex, setPausedChordIndex] = useState<number | null>(null)
+	const [pausedDotIndex, setPausedDotIndex] = useState<number | null>(null)
 	const [showSaveModal, setShowSaveModal] = useState(false)
 	const [showOpenModal, setShowOpenModal] = useState(false)
 	const [showAddProgressionModal, setShowAddProgressionModal] = useState(false)
@@ -64,6 +68,10 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	// State for selected compositions for deletion
 	const [selectedCompositionIds, setSelectedCompositionIds] = useState<Set<string>>(new Set())
 	const isPlayingRef = useRef(false)
+	const isPausedRef = useRef(false)
+	const isLoopingRef = useRef(false)
+	const pausedChordIndexRef = useRef<number | null>(null)
+	const pausedDotIndexRef = useRef<number | null>(null)
 	const metronomeIntervalRef = useRef<number | null>(null)
 	const isPlayingMetronomeRef = useRef(false)
 	const sequenceContainerRef = useRef<HTMLDivElement | null>(null)
@@ -752,7 +760,11 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 		setTimeSignature('4/4')
 		setMetronomeEnabled(false)
 		setIsPlaying(false)
+		setIsPaused(false)
 		isPlayingRef.current = false
+		isPausedRef.current = false
+		setPausedChordIndex(null)
+		setPausedDotIndex(null)
 		if (metronomeIntervalRef.current !== null) {
 			clearInterval(metronomeIntervalRef.current)
 			metronomeIntervalRef.current = null
@@ -763,35 +775,158 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	}
 
 	/**
-	 * Play the composition
+	 * Handle pause playback
 	 */
-		const handlePlay = async () => {
-		if (isPlaying) {
-			// Stop all sounds immediately when stopping playback
-			simplePlayer.stopAll()
-			// Stop metronome immediately when stopping playback
-			isPlayingMetronomeRef.current = false
-			if (metronomeIntervalRef.current !== null) {
-				clearInterval(metronomeIntervalRef.current)
-				metronomeIntervalRef.current = null
+	const handlePause = () => {
+		if (!isPlaying || isPaused) return
+		
+		// Store current position before stopping
+		const currentChordIndex = playingChordIndex !== null ? playingChordIndex : 0
+		const currentDotIndex = playingDotIndex !== null ? playingDotIndex : -1
+		
+		console.log(`Pausing at chord ${currentChordIndex}, dot ${currentDotIndex}`)
+		
+		simplePlayer.stopAll()
+		isPlayingMetronomeRef.current = false
+		if (metronomeIntervalRef.current !== null) {
+			clearInterval(metronomeIntervalRef.current)
+			metronomeIntervalRef.current = null
+		}
+		
+		// Set selected chord to current position to maintain scroll position
+		setSelectedChordIndex(currentChordIndex)
+		
+		setIsPaused(true)
+		isPausedRef.current = true
+		pausedChordIndexRef.current = currentChordIndex
+		pausedDotIndexRef.current = currentDotIndex >= 0 ? currentDotIndex : null
+		setPausedChordIndex(currentChordIndex)
+		setPausedDotIndex(currentDotIndex >= 0 ? currentDotIndex : null)
+		
+		// Ensure scroll position stays at paused location
+		setTimeout(() => {
+			if (sequenceContainerRef.current) {
+				const cardElements = sequenceContainerRef.current.querySelectorAll('.composer-timeline-item')
+				if (cardElements[currentChordIndex]) {
+					cardElements[currentChordIndex].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+				}
 			}
-			setIsPlaying(false)
-			isPlayingRef.current = false
-			// Keep selectedChordIndex as is (it should already be set to the current playing chord)
-			// Only clear playingChordIndex since playback is stopped
-			setPlayingChordIndex(null)
-			setPlayingDotIndex(null)
+		}, 100)
+	}
+
+	/**
+	 * Handle stop playback
+	 */
+	const handleStop = () => {
+		// Stop all sounds immediately when stopping playback
+		simplePlayer.stopAll()
+		// Stop metronome immediately when stopping playback
+		isPlayingMetronomeRef.current = false
+		if (metronomeIntervalRef.current !== null) {
+			clearInterval(metronomeIntervalRef.current)
+			metronomeIntervalRef.current = null
+		}
+		// Clear loop state - user must re-enable if they want to loop next time
+		isLoopingRef.current = false
+		setIsLooping(false)
+		setIsPlaying(false)
+		setIsPaused(false)
+		isPlayingRef.current = false
+		isPausedRef.current = false
+		// Jump back to the first card after stopping
+		setSelectedChordIndex(0)
+		setPlayingChordIndex(null)
+		setPlayingDotIndex(null)
+		pausedChordIndexRef.current = null
+		pausedDotIndexRef.current = null
+		setPausedChordIndex(null)
+		setPausedDotIndex(null)
+		
+		// Scroll to the first card
+		if (sequenceContainerRef.current && chords.length > 0) {
+			const cardElements = sequenceContainerRef.current.querySelectorAll('.composer-timeline-item')
+			if (cardElements[0]) {
+				cardElements[0].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+			}
+		}
+	}
+
+	/**
+	 * Toggle play/pause - if playing, pause; if paused or stopped, play/resume
+	 */
+	const handlePlayPause = async () => {
+		console.log(`handlePlayPause: isPlaying=${isPlaying}, isPaused=${isPaused}, pausedChordIndex=${pausedChordIndex}`)
+		
+		// If currently playing (not paused), pause it
+		if (isPlaying && !isPaused) {
+			console.log('Calling handlePause')
+			handlePause()
 			return
 		}
 
+		// Otherwise, start or resume playback
+		console.log('Calling handlePlay to start/resume')
+		await handlePlay()
+	}
+
+	/**
+	 * Play the composition (or resume if paused)
+	 */
+	const handlePlay = async () => {
+
 		if (chords.length === 0) return
 
-		setIsPlaying(true)
-		isPlayingRef.current = true
+		// Resume from paused position if paused - check refs for immediate synchronous access
+		let startIndex = 0
+		let startDotIndex = 0
+		console.log(`handlePlay: pausedChordIndexRef=${pausedChordIndexRef.current}, pausedDotIndexRef=${pausedDotIndexRef.current}, pausedChordIndex state=${pausedChordIndex}, pausedDotIndex state=${pausedDotIndex}`)
+		const wasPaused = pausedChordIndexRef.current !== null && pausedChordIndexRef.current !== undefined
+		
+		if (wasPaused) {
+			// Resume from paused position - use the stored indices from refs (synchronous)
+			startIndex = pausedChordIndexRef.current!
+			startDotIndex = pausedDotIndexRef.current !== null && pausedDotIndexRef.current !== undefined ? pausedDotIndexRef.current + 1 : 0
+			console.log(`✓ Resuming from chord ${startIndex}, dot ${startDotIndex} (pausedDotIndexRef was ${pausedDotIndexRef.current})`)
+			
+			// Set selected chord to paused position and scroll to it before resuming
+			setSelectedChordIndex(startIndex)
+			setTimeout(() => {
+				if (sequenceContainerRef.current) {
+					const cardElements = sequenceContainerRef.current.querySelectorAll('.composer-timeline-item')
+					if (cardElements[startIndex]) {
+						cardElements[startIndex].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+					}
+				}
+			}, 50)
+			
+			// Clear paused state immediately using refs for immediate effect
+			isPausedRef.current = false
+			setIsPaused(false)
+			
+			// Ensure playing state is set
+			isPlayingRef.current = true
+			setIsPlaying(true)
+			
+			// Clear paused positions after capturing them
+			// Don't clear them immediately - wait until after the loop starts
+		} else {
+			// Start fresh
+			console.log(`✗ Starting fresh (not paused)`)
+			startIndex = 0
+			startDotIndex = 0
+			isPlayingRef.current = true
+			setIsPlaying(true)
+			isPausedRef.current = false
+			setIsPaused(false)
+			pausedChordIndexRef.current = null
+			pausedDotIndexRef.current = null
+			setPausedChordIndex(null)
+			setPausedDotIndex(null)
 
-		// Ensure a chord is selected when starting playback
-		if (selectedChordIndex === null) {
-			setSelectedChordIndex(0)
+			// Ensure a chord is selected when starting playback
+			if (selectedChordIndex === null) {
+				setSelectedChordIndex(0)
+			}
 		}
 
 		try {
@@ -800,9 +935,18 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			const beatDurationMs = (60 / tempo) * 1000 // One beat in milliseconds
 			const beatDurationSeconds = 60 / tempo // One beat in seconds
 			
-			for (let i = 0; i < chords.length; i++) {
-				if (!isPlayingRef.current) {
-					// Stop all sounds if playback was interrupted
+			// Clear paused positions now that we've started playback
+			if (wasPaused) {
+				pausedChordIndexRef.current = null
+				pausedDotIndexRef.current = null
+				setPausedChordIndex(null)
+				setPausedDotIndex(null)
+			}
+			
+			for (let i = startIndex; i < chords.length; i++) {
+				// Check refs for immediate state (not React state which is async)
+				if (!isPlayingRef.current || isPausedRef.current) {
+					// Stop all sounds if playback was interrupted or paused
 					simplePlayer.stopAll()
 					break
 				}
@@ -837,9 +981,10 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				// For rests, just wait
 
 				// Animate through each dot for this chord
-				for (let dotIndex = 0; dotIndex < chord.beats; dotIndex++) {
-					if (!isPlayingRef.current) {
-						// Stop all sounds if playback was interrupted
+				const dotStartIndex = (i === startIndex && startDotIndex > 0) ? startDotIndex : 0
+				for (let dotIndex = dotStartIndex; dotIndex < chord.beats; dotIndex++) {
+					if (!isPlayingRef.current || isPausedRef.current) {
+						// Stop all sounds if playback was interrupted or paused
 						simplePlayer.stopAll()
 						break
 					}
@@ -849,8 +994,26 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				}
 				
 				setPlayingDotIndex(null)
+				startDotIndex = 0 // Reset after first chord
 			}
 
+			// Check if looping is enabled - use ref for immediate state check
+			// Only restart if playing and not paused
+			if (isLoopingRef.current && isPlayingRef.current && !isPausedRef.current) {
+				// Loop: continue playing from the beginning
+				setSelectedChordIndex(0)
+				setPlayingChordIndex(null)
+				setPlayingDotIndex(null)
+				// Restart the loop by calling handlePlay again
+				// Use setTimeout to allow the current execution to finish
+				setTimeout(() => {
+					if (isPlayingRef.current && isLoopingRef.current && !isPausedRef.current) {
+						handlePlay()
+					}
+				}, 100)
+				return
+			}
+			
 			// Stop all sounds when playback finishes
 			simplePlayer.stopAll()
 			// Stop metronome immediately when playback finishes (before setting isPlaying to false)
@@ -863,11 +1026,15 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 			
 			// Set isPlaying to false after stopping metronome to ensure useEffect doesn't trigger another tick
 			setIsPlaying(false)
+			setIsPaused(false)
 			isPlayingRef.current = false
+			isPausedRef.current = false
 			// Jump back to the first card after playback finishes
 			setSelectedChordIndex(0)
 			setPlayingChordIndex(null)
 			setPlayingDotIndex(null)
+			setPausedChordIndex(null)
+			setPausedDotIndex(null)
 			
 			// Scroll to the first card
 			if (sequenceContainerRef.current && chords.length > 0) {
@@ -887,11 +1054,15 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				metronomeIntervalRef.current = null
 			}
 			setIsPlaying(false)
+			setIsPaused(false)
 			isPlayingRef.current = false
+			isPausedRef.current = false
 			// Jump back to the first card on error as well
 			setSelectedChordIndex(0)
 			setPlayingChordIndex(null)
 			setPlayingDotIndex(null)
+			setPausedChordIndex(null)
+			setPausedDotIndex(null)
 			
 			// Scroll to the first card
 			if (sequenceContainerRef.current && chords.length > 0) {
@@ -899,6 +1070,86 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				if (cardElements[0]) {
 					cardElements[0].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
 				}
+			}
+		}
+	}
+
+	/**
+	 * Navigate to previous chord
+	 */
+	const handlePrevious = async () => {
+		if (chords.length === 0) return
+		const currentIndex = selectedChordIndex !== null ? selectedChordIndex : 0
+		if (currentIndex > 0) {
+			const newIndex = currentIndex - 1
+			setSelectedChordIndex(newIndex)
+			
+			// Scroll to the card in timeline
+			setTimeout(() => {
+				if (sequenceContainerRef.current) {
+					const cardElements = sequenceContainerRef.current.querySelectorAll('.composer-timeline-item')
+					if (cardElements[newIndex]) {
+						cardElements[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+					}
+				}
+			}, 50)
+			
+			// Play the chord and show animation
+			const chord = chords[newIndex]
+			if (chord && chord.chordId !== null) {
+				setPlayingChordIndex(newIndex)
+				try {
+		 			await handleChordClick(chord)
+				} catch (error) {
+					console.error('Error playing chord:', error)
+				}
+				// Clear animation after the chord duration
+				setTimeout(() => {
+					setPlayingChordIndex(null)
+				}, 2000)
+			} else {
+				// For rests, just clear immediately
+				setPlayingChordIndex(null)
+			}
+		}
+	}
+
+	/**
+	 * Navigate to next chord
+	 */
+	const handleNext = async () => {
+		if (chords.length === 0) return
+		const currentIndex = selectedChordIndex !== null ? selectedChordIndex : -1
+		if (currentIndex < chords.length - 1) {
+			const newIndex = currentIndex + 1
+			setSelectedChordIndex(newIndex)
+			
+			// Scroll to the card in timeline
+			setTimeout(() => {
+				if (sequenceContainerRef.current) {
+					const cardElements = sequenceContainerRef.current.querySelectorAll('.composer-timeline-item')
+					if (cardElements[newIndex]) {
+						cardElements[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+					}
+				}
+			}, 50)
+			
+			// Play the chord and show animation
+			const chord = chords[newIndex]
+			if (chord && chord.chordId !== null) {
+				setPlayingChordIndex(newIndex)
+				try {
+					await handleChordClick(chord)
+				} catch (error) {
+					console.error('Error playing chord:', error)
+				}
+				// Clear animation after the chord duration
+				setTimeout(() => {
+					setPlayingChordIndex(null)
+				}, 2000)
+			} else {
+				// For rests, just clear immediately
+				setPlayingChordIndex(null)
 			}
 		}
 	}
@@ -1282,7 +1533,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 						{chords.map((chord, index) => (
 							<div 
 								key={chord.id} 
-									className={`composer-timeline-item ${selectedChordIndex === index ? 'is-selected' : ''} ${draggedIndex === index ? 'is-dragging' : ''} ${dragOverIndex === index ? 'is-drag-over' : ''}`}
+									className={`composer-timeline-item ${selectedChordIndex === index ? 'is-selected' : ''} ${playingChordIndex === index ? 'is-playing' : ''} ${draggedIndex === index ? 'is-dragging' : ''} ${dragOverIndex === index ? 'is-drag-over' : ''}`}
 								draggable={!isPlaying}
 								onDragStart={(e) => handleDragStart(e, index)}
 								onDragOver={(e) => handleDragOver(e, index)}
@@ -1410,31 +1661,71 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				</>
 			)}
 
-			{/* Play Button - Above New, Save, Open */}
-			<div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px', marginBottom: '8px' }}>
+			{/* Play/Pause/Stop Buttons - Above New, Save, Open */}
+			<div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--space-2)', marginTop: '12px', marginBottom: '8px' }}>
 				<button
-					className={`tab ${isPlaying ? 'is-active' : ''}`} 
-					onClick={handlePlay}
-					disabled={chords.length === 0}
-					title={isPlaying ? 'Stop' : 'Play'}
-					style={{ flex: '1', maxWidth: 'fit-content' }}
+					className="btn-sm" 
+					onClick={handlePrevious}
+					disabled={chords.length === 0 || (selectedChordIndex !== null ? selectedChordIndex === 0 : true) || isPlaying}
+					title="Previous"
 				>
-					{isPlaying ? (
-						<>
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
-								<rect x="6" y="4" width="4" height="16"></rect>
-								<rect x="14" y="4" width="4" height="16"></rect>
-							</svg>
-							Stop
-						</>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+						<polyline points="11 17 6 12 11 7"></polyline>
+						<polyline points="18 17 13 12 18 7"></polyline>
+					</svg>
+				</button>
+				<button
+					className={`btn-sm ${isPlaying && !isPaused ? 'is-active' : ''}`} 
+					onClick={handlePlayPause}
+					disabled={chords.length === 0}
+					title={isPlaying && !isPaused ? 'Pause' : isPaused ? 'Resume' : 'Play'}
+				>
+					{isPlaying && !isPaused ? (
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+							<rect x="6" y="4" width="4" height="16"></rect>
+							<rect x="14" y="4" width="4" height="16"></rect>
+						</svg>
 					) : (
-						<>
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
-								<polygon points="5 3 19 12 5 21 5 3"></polygon>
-							</svg>
-							Play
-						</>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+							<polygon points="5 3 19 12 5 21 5 3"></polygon>
+						</svg>
 					)}
+				</button>
+				<button
+					className="btn-sm"
+					onClick={handleStop}
+					disabled={chords.length === 0 || !isPlaying}
+					title="Stop"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+						<rect x="6" y="6" width="12" height="12"></rect>
+					</svg>
+				</button>
+				<button
+					className="btn-sm"
+					onClick={handleNext}
+					disabled={chords.length === 0 || (selectedChordIndex !== null ? selectedChordIndex === chords.length - 1 : true) || isPlaying}
+					title="Next"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+						<polyline points="13 17 18 12 13 7"></polyline>
+						<polyline points="6 17 11 12 6 7"></polyline>
+					</svg>
+				</button>
+				<button
+					className={`btn-sm ${isLooping ? 'is-active' : ''}`}
+					onClick={() => {
+						const newLoopingState = !isLooping
+						isLoopingRef.current = newLoopingState
+						setIsLooping(newLoopingState)
+					}}
+					disabled={chords.length === 0}
+					title={isLooping ? 'Loop Enabled' : 'Loop Disabled'}
+					style={{ marginLeft: 'var(--space-3)' }}
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+						<path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"></path>
+					</svg>
 				</button>
 			</div>
 			{/* Composition Management - Below the composition */}

@@ -20,9 +20,17 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 	const [composition, setComposition] = useState<SavedComposition | null>(null)
 	const [selectedChordIndex, setSelectedChordIndex] = useState(0)
 	const [isPlaying, setIsPlaying] = useState(false)
+	const [isPaused, setIsPaused] = useState(false)
+	const [isLooping, setIsLooping] = useState(false)
 	const [playingChordIndex, setPlayingChordIndex] = useState<number | null>(null)
 	const [playingDotIndex, setPlayingDotIndex] = useState<number | null>(null)
+	const [pausedChordIndex, setPausedChordIndex] = useState<number | null>(null)
+	const [pausedDotIndex, setPausedDotIndex] = useState<number | null>(null)
 	const isPlayingRef = useRef(false)
+	const isPausedRef = useRef(false)
+	const isLoopingRef = useRef(false)
+	const pausedChordIndexRef = useRef<number | null>(null)
+	const pausedDotIndexRef = useRef<number | null>(null)
 	const sequenceContainerRef = useRef<HTMLDivElement | null>(null)
 
 	// Extract lesson number from ID (e.g., "lesson-1" -> 1)
@@ -98,19 +106,117 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 		}
 	}
 
-	const handlePlayComposition = async () => {
-		if (isPlaying) {
-			setIsPlaying(false)
-			isPlayingRef.current = false
-			setPlayingChordIndex(null)
-			setPlayingDotIndex(null)
+	const handlePause = () => {
+		if (!isPlaying || isPaused) return
+		
+		// Store current position before stopping
+		const currentChordIndex = playingChordIndex !== null ? playingChordIndex : 0
+		const currentDotIndex = playingDotIndex !== null ? playingDotIndex : -1
+		
+		console.log(`Pausing at chord ${currentChordIndex}, beat ${currentDotIndex}`)
+		
+		simplePlayer.stopAll()
+		
+		// Set selected chord to current position to maintain scroll position
+		setSelectedChordIndex(currentChordIndex)
+		
+		setIsPaused(true)
+		isPausedRef.current = true
+		pausedChordIndexRef.current = currentChordIndex
+		pausedDotIndexRef.current = currentDotIndex >= 0 ? currentDotIndex : null
+		setPausedChordIndex(currentChordIndex)
+		setPausedDotIndex(currentDotIndex >= 0 ? currentDotIndex : null)
+		
+		// Ensure scroll position stays at paused location
+		setTimeout(() => {
+			if (sequenceContainerRef.current) {
+				const cardElements = sequenceContainerRef.current.querySelectorAll('.lesson-timeline-item')
+				if (cardElements[currentChordIndex]) {
+					cardElements[currentChordIndex].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+				}
+			}
+		}, 100)
+	}
+
+	const handleStop = () => {
+		simplePlayer.stopAll()
+		// Clear loop state - user must re-enable if they want to loop next time
+		isLoopingRef.current = false
+		setIsLooping(false)
+		setIsPlaying(false)
+		setIsPaused(false)
+		isPlayingRef.current = false
+		isPausedRef.current = false
+		setSelectedChordIndex(0)
+		setPlayingChordIndex(null)
+		setPlayingDotIndex(null)
+		pausedChordIndexRef.current = null
+		pausedDotIndexRef.current = null
+		setPausedChordIndex(null)
+		setPausedDotIndex(null)
+	}
+
+	/**
+	 * Toggle play/pause - if playing, pause; if paused or stopped, play/resume
+	 */
+	const handlePlayPause = async () => {
+		// If currently playing (not paused), pause it
+		if (isPlaying && !isPaused) {
+			handlePause()
 			return
 		}
 
+		// Otherwise, start or resume playback
+		await handlePlayComposition()
+	}
+
+	const handlePlayComposition = async () => {
+
 		if (chords.length === 0) return
 
-		setIsPlaying(true)
-		isPlayingRef.current = true
+		// Resume from paused position if paused - check refs for immediate synchronous access
+		let startIndex = 0
+		let startBeatIndex = 0
+		console.log(`handlePlayComposition: pausedChordIndexRef=${pausedChordIndexRef.current}, pausedDotIndexRef=${pausedDotIndexRef.current}`)
+		const wasPaused = pausedChordIndexRef.current !== null && pausedChordIndexRef.current !== undefined
+		
+		if (wasPaused) {
+			// Resume from paused position - use the stored indices from refs (synchronous)
+			startIndex = pausedChordIndexRef.current!
+			startBeatIndex = pausedDotIndexRef.current !== null && pausedDotIndexRef.current !== undefined ? pausedDotIndexRef.current + 1 : 0
+			console.log(`✓ Resuming from chord ${startIndex}, beat ${startBeatIndex} (pausedDotIndexRef was ${pausedDotIndexRef.current})`)
+			
+			// Set selected chord to paused position and scroll to it before resuming
+			setSelectedChordIndex(startIndex)
+			setTimeout(() => {
+				if (sequenceContainerRef.current) {
+					const cardElements = sequenceContainerRef.current.querySelectorAll('.lesson-timeline-item')
+					if (cardElements[startIndex]) {
+						cardElements[startIndex].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+					}
+				}
+			}, 50)
+			
+			// Clear paused state immediately using refs for immediate effect
+			isPausedRef.current = false
+			setIsPaused(false)
+			
+			// Ensure playing state is set
+			isPlayingRef.current = true
+			setIsPlaying(true)
+		} else {
+			// Start fresh
+			startIndex = 0
+			startBeatIndex = 0
+			isPlayingRef.current = true
+			setIsPlaying(true)
+			isPausedRef.current = false
+			setIsPaused(false)
+			pausedChordIndexRef.current = null
+			pausedDotIndexRef.current = null
+			setPausedChordIndex(null)
+			setPausedDotIndex(null)
+		}
 
 		try {
 			await simplePlayer.initAudio()
@@ -118,8 +224,17 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 			const beatDurationMs = (60 / composition.tempo) * 1000 // One beat in milliseconds
 			const beatDurationSeconds = 60 / composition.tempo // One beat in seconds
 			
-			for (let i = 0; i < chords.length; i++) {
-				if (!isPlayingRef.current) break
+			// Clear paused positions now that we've started playback
+			if (wasPaused) {
+				pausedChordIndexRef.current = null
+				pausedDotIndexRef.current = null
+				setPausedChordIndex(null)
+				setPausedDotIndex(null)
+			}
+			
+			for (let i = startIndex; i < chords.length; i++) {
+				// Check refs for immediate state (not React state which is async)
+				if (!isPlayingRef.current || isPausedRef.current) break
 
 				const chord = chords[i]
 				const isLastChord = i === chords.length - 1
@@ -136,68 +251,81 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 
 				if (chord.chordId !== null) {
 					// Play each beat separately to show progress
-					for (let beat = 0; beat < chord.beats; beat++) {
-						if (!isPlayingRef.current) break
+					const beatStartIndex = (i === startIndex && startBeatIndex > 0) ? startBeatIndex : 0
+					for (let beat = beatStartIndex; beat < chord.beats; beat++) {
+						if (!isPlayingRef.current || isPausedRef.current) break
 						
 						setPlayingDotIndex(beat)
 						
 						// Play the chord with the correct duration
-						// Add extra duration to the last chord (1 extra beat) - only for automatic playback
-						let chordDuration = beatDurationSeconds * chord.beats
-						if (isLastChord && beat === chord.beats - 1) {
-							chordDuration += beatDurationSeconds // Add one extra beat for the last note
-						}
+						const chordDuration = beatDurationSeconds * chord.beats
 						
 						const notes = getNotesFromOpenStates(chord.openStates, fluteType)
 						simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration)
 						
-						// Wait for one beat duration (except for last beat of last chord - it plays longer)
-						if (!(isLastChord && beat === chord.beats - 1)) {
-							await new Promise(resolve => setTimeout(resolve, beatDurationMs))
-						} else {
-							// For last beat of last chord, wait for the extra duration
-							await new Promise(resolve => setTimeout(resolve, beatDurationMs + beatDurationMs))
-						}
+						// Wait for one beat duration
+						await new Promise(resolve => setTimeout(resolve, beatDurationMs))
 					}
 				} else {
 					// For rests, wait for all beats
-					for (let beat = 0; beat < chord.beats; beat++) {
-						if (!isPlayingRef.current) break
+					const beatStartIndex = (i === startIndex && startBeatIndex > 0) ? startBeatIndex : 0
+					for (let beat = beatStartIndex; beat < chord.beats; beat++) {
+						if (!isPlayingRef.current || isPausedRef.current) break
 						setPlayingDotIndex(beat)
 						await new Promise(resolve => setTimeout(resolve, beatDurationMs))
 					}
 				}
 
-				// Keep the last chord highlighted longer
-				if (isLastChord) {
-					// Wait a bit longer before clearing the animation for the last chord
-					await new Promise(resolve => setTimeout(resolve, beatDurationMs))
-				}
-				
 				setPlayingDotIndex(null)
+				startBeatIndex = 0 // Reset after first chord
 				
-				// Clear playing animation after a short delay (except for last chord which stays longer)
+				// Clear playing animation after a short delay
 				if (!isLastChord) {
 					setPlayingChordIndex(null)
 				}
 			}
 			
-			// Clear the last chord animation after the extra duration
+			// Clear the last chord animation after a short delay
 			setTimeout(() => {
 				setPlayingChordIndex(null)
 			}, beatDurationMs)
 
+			// Check if looping is enabled - use ref for immediate state check
+			// Only restart if playing and not paused
+			if (isLoopingRef.current && isPlayingRef.current && !isPausedRef.current) {
+				// Loop: continue playing from the beginning
+				setSelectedChordIndex(0)
+				setPlayingChordIndex(null)
+				setPlayingDotIndex(null)
+				// Restart the loop by calling handlePlayComposition again
+				// Use setTimeout to allow the current execution to finish
+				setTimeout(() => {
+					if (isPlayingRef.current && isLoopingRef.current && !isPausedRef.current) {
+						handlePlayComposition()
+					}
+				}, 100)
+				return
+			}
+
 			setIsPlaying(false)
+			setIsPaused(false)
 			isPlayingRef.current = false
+			isPausedRef.current = false
 			setSelectedChordIndex(0)
 			setPlayingChordIndex(null)
 			setPlayingDotIndex(null)
+			setPausedChordIndex(null)
+			setPausedDotIndex(null)
 		} catch (error) {
 			console.error('Error playing composition:', error)
 			setIsPlaying(false)
+			setIsPaused(false)
 			isPlayingRef.current = false
+			isPausedRef.current = false
 			setPlayingChordIndex(null)
-			setPlayingDotIndex(null)
+		 	setPlayingDotIndex(null)
+			setPausedChordIndex(null)
+			setPausedDotIndex(null)
 		}
 	}
 
@@ -332,7 +460,7 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 						</div>
 
 						{/* Main Large Chord Card - Square */}
-						<div className={`composer-main-card ${playingChordIndex === selectedChordIndex ? 'is-playing' : ''}`}>
+						<div className="composer-main-card">
 							{selectedChord.chordId === null ? (
 								<div className="composer-main-rest-symbol">
 									<svg 
@@ -455,26 +583,30 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 							</svg>
 						</button>
 						<button 
-							className={`btn-sm ${isPlaying ? 'is-active' : ''}`} 
-							onClick={handlePlayComposition}
-							style={{ minWidth: '100px' }}
+							className={`btn-sm ${isPlaying && !isPaused ? 'is-active' : ''}`} 
+							onClick={handlePlayPause}
+							title={isPlaying && !isPaused ? 'Pause' : isPaused ? 'Resume' : 'Play'}
 						>
-							{isPlaying ? (
-								<>
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }}>
-										<rect x="6" y="4" width="4" height="16"></rect>
-										<rect x="14" y="4" width="4" height="16"></rect>
-									</svg>
-									Stop
-								</>
+							{isPlaying && !isPaused ? (
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+									<rect x="6" y="4" width="4" height="16"></rect>
+									<rect x="14" y="4" width="4" height="16"></rect>
+								</svg>
 							) : (
-								<>
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }}>
-										<polygon points="5 3 19 12 5 21 5 3"></polygon>
-									</svg>
-									Play
-								</>
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+									<polygon points="5 3 19 12 5 21 5 3"></polygon>
+								</svg>
 							)}
+						</button>
+						<button 
+							className="btn-sm"
+							onClick={handleStop}
+							disabled={!isPlaying}
+							title="Stop"
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+								<rect x="6" y="6" width="12" height="12"></rect>
+							</svg>
 						</button>
 						<button 
 							className="btn-sm" 
@@ -485,6 +617,20 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
 								<polyline points="13 17 18 12 13 7"></polyline>
 								<polyline points="6 17 11 12 6 7"></polyline>
+							</svg>
+						</button>
+						<button 
+							className={`btn-sm ${isLooping ? 'is-active' : ''}`}
+							onClick={() => {
+								const newLoopingState = !isLooping
+								isLoopingRef.current = newLoopingState
+								setIsLooping(newLoopingState)
+							}}
+							title={isLooping ? 'Loop Enabled' : 'Loop Disabled'}
+							style={{ marginLeft: 'var(--space-3)' }}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+								<path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"></path>
 							</svg>
 						</button>
 				</div>
