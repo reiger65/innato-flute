@@ -231,7 +231,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 
 	return (
 		<div className="modal-overlay" onClick={onClose}>
-			<div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '90vh' }}>
+			<div className="modal-content" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-header">
 					<h2 className="modal-title">Manage Lessons</h2>
 					<button className="icon-btn-sm" onClick={onClose} aria-label="Close">

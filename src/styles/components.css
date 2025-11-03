@@ -182,15 +182,30 @@ select.btn-sm:active {
 }
 
 .floating-menu {
-	position: fixed;
-	top: 24px;
-	left: 50%;
-	transform: translateX(-50%);
-	display: flex;
-	flex-direction: row;
-	gap: var(--space-2);
+	position: fixed !important;
+	top: 24px !important;
+	left: 50% !important;
+	right: auto !important;
+	transform: translateX(-50%) !important;
+	display: flex !important;
+	flex-direction: row !important;
+	justify-content: center !important;
+	align-items: center !important;
+	gap: var(--space-2) !important;
 	z-index: 1000;
-	margin-bottom: var(--space-4);
+	margin: 0 !important;
+	margin-bottom: var(--space-4) !important;
+	max-width: 428px !important;
+	width: auto !important;
+	padding: 0 !important;
+	box-sizing: border-box;
+}
+
+.floating-menu > * {
+	margin-left: 0 !important;
+	margin-right: 0 !important;
+	flex-shrink: 0;
+	flex-grow: 0;
 }
 
 /* --- Navigation --- */
@@ -300,7 +315,7 @@ select.btn-sm:active {
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: 600px;
+	max-width: 430px;
 	width: 100%;
 	max-height: 90vh;
 	overflow-y: auto;
@@ -308,22 +323,22 @@ select.btn-sm:active {
 	position: relative;
 }
 
-/* Standardized modal sizes */
+/* Standardized modal sizes - all iPhone-sized */
 .modal-small {
-	max-width: 400px;
+	max-width: 430px;
 }
 
 .modal-medium {
-	max-width: 600px;
+	max-width: 430px;
 }
 
 .modal-large {
-	max-width: 900px;
+	max-width: 430px;
 }
 
 .modal-full {
-	max-width: 95vw;
-	width: 95vw;
+	max-width: 430px;
+	width: 100%;
 }
 
 .modal-header {
@@ -360,7 +375,7 @@ select.btn-sm:active {
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: 600px;
+	max-width: 430px;
 	width: 100%;
 	max-height: 90vh;
 	overflow-y: auto;
@@ -401,7 +416,7 @@ select.btn-sm:active {
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: 800px;
+	max-width: 430px;
 	width: 100%;
 	max-height: 90vh;
 	overflow-y: auto;
@@ -459,7 +474,7 @@ select.btn-sm:active {
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: min(95vw, 100%);
+	max-width: 430px;
 	width: 100%;
 	max-height: 85vh;
 	overflow-y: auto;
@@ -664,7 +679,7 @@ select.btn-sm:active {
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: 600px;
+	max-width: 430px;
 	width: 100%;
 	max-height: 90vh;
 	overflow-y: auto;
@@ -1330,16 +1345,19 @@ select.btn-sm:active {
 
 .library-panel {
 	position: fixed;
-	top: 0;
-	right: 0;
-	bottom: 0;
-	width: 400px;
-	max-width: 90vw;
+	top: 60px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 430px;
+	max-width: min(430px, calc(100vw - var(--space-4) * 2));
+	max-height: calc(100vh - 80px);
 	background: var(--color-white);
-	border-left: var(--border-2) solid var(--color-black);
+	border: var(--border-2) solid var(--color-black);
+	border-radius: var(--radius-2);
 	overflow-y: auto;
 	z-index: 1501;
 	padding: var(--space-4);
+	box-sizing: border-box;
 }
 
 .panel-header {
@@ -1365,25 +1383,24 @@ select.btn-sm:active {
 	right: 0;
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
-	display: flex;
-	align-items: flex-start;
-	justify-content: center;
 	z-index: 2000;
-	padding: var(--space-4);
-	padding-top: var(--space-4);
-	overflow-y: auto;
 }
 
 .drone-panel {
+	position: fixed;
+	top: 60px;
+	left: 50%;
+	transform: translateX(-50%);
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: 500px;
-	width: 100%;
-	max-height: 90vh;
+	width: 430px;
+	max-width: min(430px, calc(100vw - var(--space-4) * 2));
+	max-height: calc(100vh - 80px);
 	overflow-y: auto;
 	padding: var(--space-4);
-	position: relative;
+	box-sizing: border-box;
+	z-index: 2001;
 }
 
 .drone-header {
@@ -1758,7 +1775,7 @@ select.btn-sm:active {
 	background: var(--color-white);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	max-width: 600px;
+	max-width: 430px;
 	width: 95%;
 	max-height: 90vh;
 	overflow-y: auto;
@@ -2113,6 +2130,14 @@ select.btn-sm:active {
 		top: var(--space-2);
 		left: 50%;
 		transform: translateX(-50%);
+		justify-content: center !important;
+		align-items: center !important;
+		margin: 0 !important;
+		margin-bottom: var(--space-4) !important;
+		max-width: 428px;
+		width: auto;
+		padding: 0 !important;
+		box-sizing: border-box;
 	}
 
 	.lesson-modal-overlay {
@@ -2141,8 +2166,10 @@ select.btn-sm:active {
 	}
 
 	.library-panel {
-		width: 100vw;
-		max-width: 100vw;
+		top: 44px;
+		width: min(430px, calc(100vw - var(--space-4) * 2));
+		max-width: min(430px, calc(100vw - var(--space-4) * 2));
+		max-height: calc(100vh - 60px);
 	}
 
 	.chord-selector-modal {
@@ -2161,9 +2188,11 @@ select.btn-sm:active {
 	}
 
 	.drone-panel {
-		max-height: 90vh;
+		top: 44px;
+		max-width: min(430px, calc(100vw - var(--space-4) * 2));
+		max-height: calc(100vh - 60px);
 		padding: var(--space-3);
-		width: calc(100% - var(--space-2));
+		width: min(430px, calc(100vw - var(--space-4) * 2));
 	}
 
 	.drone-overlay {
