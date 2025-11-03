@@ -47,22 +47,24 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			// If admin is logged in, sync local lessons to Supabase first
 			const currentUser = getCurrentUser()
 			if (currentUser && isAdmin(currentUser)) {
-				const syncKey = `lesson-sync-admin-${currentUser.id}`
-				if (!sessionStorage.getItem(syncKey)) {
-					try {
-						const synced = await syncLocalLessonsToSupabase()
-						if (synced > 0) {
-							console.log(`[ManageLessonsModal] Synced ${synced} local lessons to Supabase`)
-							onShowToast?.(`Synced ${synced} local lesson(s) to Supabase`, 'success')
-						}
-						sessionStorage.setItem(syncKey, 'true')
-					} catch (error) {
-						console.error('Error syncing lessons:', error)
+				// Always try to sync (don't use sessionStorage check here - we want to sync every time modal opens)
+				try {
+					const synced = await syncLocalLessonsToSupabase()
+					if (synced > 0) {
+						console.log(`[ManageLessonsModal] Synced ${synced} local lessons to Supabase`)
+						onShowToast?.(`Synced ${synced} local lesson(s) to Supabase`, 'success')
+						// Wait a bit for Supabase to update, then reload
+						await new Promise(resolve => setTimeout(resolve, 500))
 					}
+				} catch (error) {
+					console.error('Error syncing lessons:', error)
+					onShowToast?.('Error syncing lessons to Supabase. Check console for details.', 'error')
 				}
 			}
 			
 			const loadedLessons = await loadLessons()
+			console.log(`[ManageLessonsModal] Loaded ${loadedLessons.length} lessons:`, loadedLessons.map(l => ({ id: l.id, title: l.title, hasComposition: !!l.compositionId })))
+			
 			// Sort lessons by lesson number (lesson-1, lesson-2, etc.) so newest is last
 			const getLessonNumber = (id: string): number => {
 				const match = id.match(/lesson-(\d+)/)
@@ -74,6 +76,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			setLessons(sortedLessons)
 		} catch (error) {
 			console.error('Error loading lessons:', error)
+			onShowToast?.('Failed to load lessons. Please try again.', 'error')
 		} finally {
 			setLoading(false)
 		}

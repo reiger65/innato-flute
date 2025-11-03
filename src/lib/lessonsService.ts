@@ -62,11 +62,17 @@ export async function syncLocalLessonsToSupabase(): Promise<number> {
 		
 		// Get existing Supabase lessons (by custom_id to avoid duplicates)
 		// Lessons are global, so don't filter by created_by
-		const { data: existingData } = await supabase
+		const { data: existingData, error: existingError } = await supabase
 			.from('lessons')
 			.select('custom_id')
 		
+		if (existingError) {
+			console.warn('[lessonsService] Error checking existing lessons:', existingError)
+			// Continue anyway - might be RLS issue, but we'll try to insert
+		}
+		
 		const existingCustomIds = new Set((existingData || []).map(l => l.custom_id).filter(Boolean))
+		console.log(`[lessonsService] Found ${existingCustomIds.size} existing lessons in Supabase, ${localLessons.length} local lessons to check`)
 		
 		// Upload local lessons that don't exist in Supabase
 		let syncedCount = 0
@@ -210,11 +216,14 @@ class LocalLessonsService implements LessonsService {
 				
 				// If we have Supabase lessons, use them (they're global)
 				if (supabaseLessons.length > 0) {
+					console.log(`[lessonsService] Loaded ${supabaseLessons.length} lessons from Supabase`)
 					return supabaseLessons
 				}
 				
 				// Fallback to local if Supabase is empty
-				return localLoadLessons()
+				const localLessons = localLoadLessons()
+				console.log(`[lessonsService] Supabase empty, loaded ${localLessons.length} lessons from localStorage`)
+				return localLessons
 			} catch (error) {
 				console.error('[lessonsService] Error loading from Supabase:', error)
 				// Always fallback to localStorage on error
