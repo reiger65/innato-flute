@@ -14,7 +14,8 @@ import { simplePlayer, type TuningFrequency } from './lib/simpleAudioPlayer'
 import { type FluteType, getNoteForFingering, openStatesToFingering, getNotesFromOpenStates } from './lib/fluteData'
 import { getCurrentUser, type User, isAdmin } from './lib/authService'
 import { getSupabaseClient } from './lib/supabaseClient'
-import { getLessonsWithProgress, getCompletedLessonCount, assignCompositionsToLessons, type Lesson } from './lib/lessonsData'
+import { getLessonsWithProgress, getCompletedLessonCount, type Lesson } from './lib/lessonsService'
+import { assignCompositionsToLessons } from './lib/lessonsData'
 import { saveProgression, loadProgressions, deleteProgression, type SavedProgression } from './lib/progressionService'
 import { saveSharedProgression, loadSharedProgressions } from './lib/sharedItemsStorage'
 import { type SavedComposition } from './lib/compositionStorage'
@@ -187,9 +188,9 @@ export default function App() {
 		}
 	}, [])
 
-	// Load lessons with progress
-	const loadLessons = useCallback(() => {
-		const lessonsWithProgress = getLessonsWithProgress()
+	// Load lessons with progress (async - loads from Supabase)
+	const loadLessons = useCallback(async () => {
+		const lessonsWithProgress = await getLessonsWithProgress()
 		setLessons(lessonsWithProgress)
 	}, [])
 
@@ -220,7 +221,7 @@ export default function App() {
 	useEffect(() => {
 		if (activeView === 'lessons') {
 			// Auto-assign compositions to lessons
-			assignCompositionsToLessons().catch(err => console.error('Error assigning compositions:', err))
+			assignCompositionsToLessons().catch((err: any) => console.error('Error assigning compositions:', err))
 			loadLessons()
 		}
 	}, [activeView, loadLessons])
@@ -2391,9 +2392,9 @@ export default function App() {
 					fluteType={fluteType}
 					tuning={tuning}
 					onClose={() => setSelectedLesson(null)}
-					onComplete={(completedLessonId) => {
+					onComplete={async (completedLessonId) => {
 						// Refresh lessons with updated progress
-						const updatedLessons = getLessonsWithProgress()
+						const updatedLessons = await getLessonsWithProgress()
 						setLessons(updatedLessons)
 						
 						// Find the next lesson
@@ -2402,7 +2403,7 @@ export default function App() {
 							return match ? parseInt(match[1], 10) : 0
 						}
 						const currentLessonNumber = getLessonNumber(completedLessonId)
-						const nextLesson = updatedLessons.find(l => {
+						const nextLesson = updatedLessons.find((l: Lesson) => {
 							const lessonNum = getLessonNumber(l.id)
 							return lessonNum === currentLessonNumber + 1
 						})

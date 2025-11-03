@@ -14,7 +14,8 @@ import {
 	saveLessons as localSaveLessons,
 	updateLesson as localUpdateLesson,
 	addLesson as localAddLesson,
-	deleteLesson as localDeleteLesson
+	deleteLesson as localDeleteLesson,
+	loadLessonProgress
 } from './lessonsData'
 
 /**
@@ -151,9 +152,9 @@ class LocalLessonsService implements LessonsService {
 					// Extract lesson number from custom_id or lesson_number
 					const customId = item.custom_id || `lesson-${item.lesson_number}`
 					
-					return {
+					const lesson: Lesson = {
 						id: customId,
-						title: item.title,
+						title: item.title || `Lesson ${item.lesson_number}`,
 						subtitle: item.subtitle || '',
 						topic: item.topic || item.category || '', // Use topic field, fallback to category
 						description: item.description || '', // Preserve description
@@ -161,7 +162,19 @@ class LocalLessonsService implements LessonsService {
 						compositionId: item.composition_id,
 						unlocked: false, // Will be calculated
 						completed: false // Will be loaded from progress
-					} as Lesson
+					}
+					
+					// Debug log for each lesson to verify fields
+					if (item.subtitle || item.description || item.topic) {
+						console.log(`[lessonsService] Loaded lesson "${lesson.title}":`, {
+							subtitle: lesson.subtitle,
+							description: lesson.description?.substring(0, 50) + '...',
+							topic: lesson.topic,
+							category: lesson.category
+						})
+					}
+					
+					return lesson
 				})
 				
 				// If admin is logged in and Supabase has lessons, check if local lessons need syncing
@@ -488,11 +501,13 @@ class LocalLessonsService implements LessonsService {
 		})
 		
 		// Update all lesson titles to match their position, then save
+		// Make sure to preserve ALL fields including description
 		const updatedLessons = sortedLessons.map((lesson, index) => ({
 			...lesson,
 			title: `Lesson ${index + 1}`, // Auto-generate title based on position
 			subtitle: lesson.subtitle || '',
-			topic: (lesson as any).topic || ''
+			topic: (lesson as any).topic || '',
+			description: lesson.description || '' // Preserve description
 		}))
 		
 		// Save updated titles if any changed (this will sync to Supabase via saveLessons)
@@ -571,6 +586,14 @@ export async function deleteLesson(lessonId: string): Promise<boolean> {
 
 export async function getLessonsWithProgress(): Promise<Lesson[]> {
 	return lessonsService.getLessonsWithProgress()
+}
+
+/**
+ * Get completed lesson count
+ */
+export function getCompletedLessonCount(): number {
+	const progress = loadLessonProgress()
+	return Object.values(progress).filter(Boolean).length
 }
 
 export async function reorderLessons(lessonIds: string[]): Promise<boolean> {
