@@ -1224,8 +1224,13 @@ export default function App() {
 									<button 
 										className="btn-sm"
 										onClick={() => setShowManageLessonsModal(true)}
-										title="Manage Lessons"
-										style={{ marginLeft: 'auto' }}
+										title="Manage Lessons (Admin)"
+										style={{ 
+											marginLeft: 'auto',
+											border: '2px solid #dc2626',
+											color: '#dc2626',
+											background: 'transparent'
+										}}
 									>
 										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ marginRight: '4px' }}>
 											<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>

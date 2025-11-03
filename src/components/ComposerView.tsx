@@ -1966,26 +1966,27 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 																setShowAddToLessonsModal(true)
 															}, 100)
 														}}
-														title="Add to Lessons"
+														title="Add to Lessons (Admin)"
 														style={{ 
 															width: '28px',
 															height: '28px',
-															border: '2px solid #000',
+															border: '2px solid #dc2626',
 															borderRadius: '50%',
 															display: 'flex',
 															alignItems: 'center',
 															justifyContent: 'center',
 															background: '#fff',
+															color: '#dc2626',
 															cursor: 'pointer',
 															flexShrink: 0
 														}}
 														onMouseEnter={(e) => {
-															e.currentTarget.style.background = '#000'
+															e.currentTarget.style.background = '#dc2626'
 															e.currentTarget.style.color = '#fff'
 														}}
 														onMouseLeave={(e) => {
 															e.currentTarget.style.background = '#fff'
-															e.currentTarget.style.color = '#000'
+															e.currentTarget.style.color = '#dc2626'
 														}}
 													>
 														<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', display: 'block' }}>
@@ -2084,8 +2085,8 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 									}}
 									style={{ 
 										background: 'transparent',
-										border: '2px solid red',
-										color: 'red'
+										border: '2px solid #dc2626',
+										color: '#dc2626'
 									}}
 								>
 									Delete All Compositions

@@ -11,7 +11,6 @@ interface AddToLessonsModalProps {
 }
 
 export function AddToLessonsModal({ isOpen, compositionId, compositionName, onClose, onSuccess }: AddToLessonsModalProps) {
-	const [title, setTitle] = useState('') // Title will be auto-generated, so don't pre-fill
 	const [subtitle, setSubtitle] = useState('')
 	const [topic, setTopic] = useState('')
 	const [categorySuggestions, setCategorySuggestions] = useState<string[]>([])
@@ -55,7 +54,6 @@ export function AddToLessonsModal({ isOpen, compositionId, compositionName, onCl
 	}
 
 	const handleCancel = () => {
-		setTitle('')
 		setSubtitle('')
 		setTopic('')
 		setDescription('')

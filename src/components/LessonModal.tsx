@@ -33,12 +33,6 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 	const pausedDotIndexRef = useRef<number | null>(null)
 	const sequenceContainerRef = useRef<HTMLDivElement | null>(null)
 
-	// Extract lesson number from ID (e.g., "lesson-1" -> 1)
-	const getLessonNumber = (id: string): number => {
-		const match = id.match(/lesson-(\d+)/)
-		return match ? parseInt(match[1], 10) : 0
-	}
-
 	// Load composition when modal opens
 	useEffect(() => {
 		const loadComp = async () => {

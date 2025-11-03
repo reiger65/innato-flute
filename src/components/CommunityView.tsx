@@ -460,7 +460,7 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 												}}
 												aria-label={`Delete ${item.name}`}
 												title={`Delete ${item.name} (Admin)`}
-												style={{ color: 'rgba(220, 38, 38, 0.8)' }}
+												style={{ color: '#dc2626' }}
 											>
 												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ flexShrink: 0 }}>
 													<polyline points="3 6 5 6 21 6"></polyline>
