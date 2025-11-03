@@ -1103,8 +1103,35 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 				</>
 			)}
 
+			{/* Play Button - Above New, Save, Open */}
+			<div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px', marginBottom: '12px' }}>
+				<button
+					className={`tab ${isPlaying ? 'is-active' : ''}`} 
+					onClick={handlePlay}
+					disabled={chords.length === 0}
+					title={isPlaying ? 'Stop' : 'Play'}
+					style={{ flex: '1', maxWidth: 'fit-content' }}
+				>
+					{isPlaying ? (
+						<>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
+								<rect x="6" y="4" width="4" height="16"></rect>
+								<rect x="14" y="4" width="4" height="16"></rect>
+							</svg>
+							Stop
+						</>
+					) : (
+						<>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
+								<polygon points="5 3 19 12 5 21 5 3"></polygon>
+							</svg>
+							Play
+						</>
+					)}
+				</button>
+			</div>
 			{/* Composition Management - Below the composition */}
-			<div style={{ marginTop: '24px', marginBottom: '16px' }}>
+			<div style={{ marginBottom: '12px' }}>
 				<div className="tabs" style={{ marginBottom: 0 }}>
 				<button 
 						className="btn-sm tab" 
@@ -1169,33 +1196,6 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 						</button>
 					)}
 				</div>
-			</div>
-			{/* Play Button - Below New, Save, Open */}
-			<div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-				<button
-					className={`tab ${isPlaying ? 'is-active' : ''}`} 
-					onClick={handlePlay}
-					disabled={chords.length === 0}
-					title={isPlaying ? 'Stop' : 'Play'}
-					style={{ flex: '1', maxWidth: 'fit-content' }}
-				>
-					{isPlaying ? (
-						<>
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
-								<rect x="6" y="4" width="4" height="16"></rect>
-								<rect x="14" y="4" width="4" height="16"></rect>
-							</svg>
-							Stop
-						</>
-					) : (
-						<>
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
-								<polygon points="5 3 19 12 5 21 5 3"></polygon>
-							</svg>
-							Play
-						</>
-					)}
-				</button>
 			</div>
 
 			{/* Save Modal */}
