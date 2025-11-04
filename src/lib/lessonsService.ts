@@ -428,11 +428,24 @@ class LocalLessonsService implements LessonsService {
 				if (updates.category !== undefined) updateData.difficulty = updates.category // category maps to difficulty
 				if (updates.compositionId !== undefined) updateData.composition_id = updates.compositionId
 				
-				// If title changed, update lesson_number based on new position
-				if (updates.title) {
+				// Only update lesson_number if title actually changed (indicating a position change)
+				// Don't update lesson_number if we're just updating other fields like subtitle/description
+				// Get the current lesson to compare
+				const { data: currentLesson } = await supabase
+					.from('lessons')
+					.select('title, lesson_number')
+					.eq('custom_id', lessonId)
+					.single()
+				
+				if (currentLesson && updates.title && updates.title !== currentLesson.title) {
+					// Title changed, so update lesson_number based on new position
 					const match = updates.title.match(/Lesson (\d+)/)
 					if (match) {
-						updateData.lesson_number = parseInt(match[1], 10)
+						const newLessonNumber = parseInt(match[1], 10)
+						// Only update if it's different from current
+						if (newLessonNumber !== currentLesson.lesson_number) {
+							updateData.lesson_number = newLessonNumber
+						}
 					}
 				}
 				

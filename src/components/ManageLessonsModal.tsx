@@ -123,7 +123,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		setEditCategory(lesson.category)
 	}
 
-	const handleSaveEdit = async () => {
+		const handleSaveEdit = async () => {
 		if (!editingLesson) return
 
 		// Use custom topic if "Add new..." was selected, otherwise use selected topic
@@ -131,13 +131,9 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 
 		setLoading(true)
 		try {
-			// Title is auto-generated based on position, so we don't update it
-			// Find the current index of this lesson to generate the correct title
-			const currentIndex = lessons.findIndex(l => l.id === editingLesson.id)
-			const autoTitle = `Lesson ${currentIndex + 1}`
-			
+			// Don't update title - it's auto-generated and shouldn't change when editing other fields
+			// Only update the fields that were actually edited
 			await updateLesson(editingLesson.id, {
-				title: autoTitle, // Always use auto-generated title
 				subtitle: editSubtitle.trim(),
 				topic: finalTopic,
 				description: editDescription.trim(),
