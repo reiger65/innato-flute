@@ -13,7 +13,6 @@ import {
 	loadLessons as localLoadLessons,
 	saveLessons as localSaveLessons,
 	updateLesson as localUpdateLesson,
-	addLesson as localAddLesson,
 	deleteLesson as localDeleteLesson,
 	loadLessonProgress
 } from './lessonsData'
@@ -148,6 +147,11 @@ class LocalLessonsService implements LessonsService {
 				// Lessons are global - no authentication required to view them
 				// Load ALL lessons from Supabase (not filtered by user)
 				// This works even when logged out due to RLS policy "Anyone can read lessons"
+				
+				// Get deleted lesson IDs from localStorage (similar to compositions)
+				const deletedIdsKey = 'deleted-lesson-ids'
+				const deletedIds = new Set<string>(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+				
 				const { data, error } = await supabase
 					.from('lessons')
 					.select('*')
@@ -159,35 +163,41 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				// Transform Supabase data to Lesson format
-				const supabaseLessons = (data || []).map(item => {
-					// Extract lesson number from custom_id or lesson_number
-					const customId = item.custom_id || `lesson-${item.lesson_number}`
-					const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
-					
-					const lesson: Lesson = {
-						id: customId,
-						title: `Lesson ${lessonNum}`, // Always generate title from custom_id number, ignore Supabase title
-						subtitle: item.subtitle || '',
-						topic: item.topic || '', // Only use topic field, don't fallback to category
-						description: item.description || '', // Preserve description
-						category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
-						compositionId: item.composition_id,
-						unlocked: false, // Will be calculated
-						completed: false // Will be loaded from progress
-					}
-					
-					// Debug log for each lesson to verify fields
-					console.log(`[lessonsService] Loaded lesson "${lesson.title}" (${lesson.id}):`, {
-						subtitle: item.subtitle || '(empty)',
-						description: item.description || '(empty)',
-						topic: item.topic || '(empty)',
-						category: item.category || '(empty)',
-						difficulty: item.difficulty || '(empty)',
-						compositionId: lesson.compositionId
+				const supabaseLessons = (data || [])
+					.filter(item => {
+						// Filter out deleted lessons
+						const customId = item.custom_id || `lesson-${item.lesson_number}`
+						return !deletedIds.has(customId)
 					})
-					
-					return lesson
-				})
+					.map(item => {
+						// Extract lesson number from custom_id or lesson_number
+						const customId = item.custom_id || `lesson-${item.lesson_number}`
+						const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
+						
+						const lesson: Lesson = {
+							id: customId,
+							title: `Lesson ${lessonNum}`, // Always generate title from custom_id number, ignore Supabase title
+							subtitle: item.subtitle || '',
+							topic: item.topic || '', // Only use topic field, don't fallback to category
+							description: item.description || '', // Preserve description
+							category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
+							compositionId: item.composition_id,
+							unlocked: false, // Will be calculated
+							completed: false // Will be loaded from progress
+						}
+						
+						// Debug log for each lesson to verify fields
+						console.log(`[lessonsService] Loaded lesson "${lesson.title}" (${lesson.id}):`, {
+							subtitle: item.subtitle || '(empty)',
+							description: item.description || '(empty)',
+							topic: item.topic || '(empty)',
+							category: item.category || '(empty)',
+							difficulty: item.difficulty || '(empty)',
+							compositionId: lesson.compositionId
+						})
+						
+						return lesson
+					})
 				
 				// Don't filter out lessons - show all lessons from Supabase
 				// Only filter dummy lessons when they're created locally, not when loading from Supabase
@@ -230,21 +240,33 @@ class LocalLessonsService implements LessonsService {
 										
 										if (reloadData) {
 											sessionStorage.setItem(syncKey, 'true')
-											const reloadedLessons = (reloadData || []).map(item => {
-												const customId = item.custom_id || `lesson-${item.lesson_number}`
-												const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
-												return {
-													id: customId,
-													title: `Lesson ${lessonNum}`, // Always generate title from custom_id number
-													subtitle: item.subtitle || '',
-													topic: item.topic || '', // Only use topic field, don't fallback to category
-													description: item.description || '',
-													category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
-													compositionId: item.composition_id,
-													unlocked: false,
-													completed: false
-												} as Lesson
-											}).filter(lesson => lesson.compositionId !== null)
+											
+											// Get deleted lesson IDs from localStorage
+											const deletedIdsKey = 'deleted-lesson-ids'
+											const deletedIds = new Set<string>(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+											
+											const reloadedLessons = (reloadData || [])
+												.filter(item => {
+													// Filter out deleted lessons
+													const customId = item.custom_id || `lesson-${item.lesson_number}`
+													return !deletedIds.has(customId)
+												})
+												.map(item => {
+													const customId = item.custom_id || `lesson-${item.lesson_number}`
+													const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
+													return {
+														id: customId,
+														title: `Lesson ${lessonNum}`, // Always generate title from custom_id number
+														subtitle: item.subtitle || '',
+														topic: item.topic || '', // Only use topic field, don't fallback to category
+														description: item.description || '',
+														category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
+														compositionId: item.composition_id,
+														unlocked: false,
+														completed: false
+													} as Lesson
+												})
+												.filter(lesson => lesson.compositionId !== null)
 											return reloadedLessons
 										}
 									}
@@ -428,30 +450,100 @@ class LocalLessonsService implements LessonsService {
 
 	async addLesson(lesson: Omit<Lesson, 'id'>): Promise<Lesson> {
 		// Only admins can add lessons (lessons are global)
-		// Add to local first
-		const localLesson = localAddLesson(lesson)
+		
+		// Check Supabase for existing lessons BEFORE creating local lesson
+		// This ensures we use the correct next lesson number
+		let maxLessonNumber = 0
 		
 		if (isSupabaseConfigured()) {
 			try {
 				const supabase = getSupabaseClient()
-				if (!supabase) return localLesson
+				if (supabase) {
+					const user = getCurrentUser()
+					if (user) {
+						const { data: { session } } = await supabase.auth.getSession()
+						if (session?.user?.id) {
+							// Admin check - only admins can add global lessons
+							const { isAdmin } = await import('./authService')
+							if (isAdmin(user)) {
+								// Check existing lessons in Supabase to determine next lesson number
+								const { data: existingLessons } = await supabase
+									.from('lessons')
+									.select('custom_id')
+									.order('lesson_number', { ascending: true })
+								
+								// Find the highest lesson number from Supabase
+								const getLessonNumber = (id: string | null | undefined): number => {
+									if (!id) return 0
+									const match = id.match(/lesson-(\d+)/)
+									return match ? parseInt(match[1], 10) : 0
+								}
+								
+								const maxFromSupabase = (existingLessons || []).reduce((max, l) => {
+									const num = getLessonNumber(l.custom_id)
+									return num > max ? num : max
+								}, 0)
+								
+								maxLessonNumber = maxFromSupabase
+							}
+						}
+					}
+				}
+			} catch (error) {
+				console.warn('[lessonsService] Error checking Supabase lessons, using localStorage:', error)
+			}
+		}
+		
+		// Also check localStorage for any lessons not yet synced
+		const localLessons = localLoadLessons()
+		const getLessonNumber = (id: string): number => {
+			const match = id.match(/lesson-(\d+)/)
+			return match ? parseInt(match[1], 10) : 0
+		}
+		
+		const maxFromLocal = localLessons.reduce((max, l) => {
+			const num = getLessonNumber(l.id)
+			return num > max ? num : max
+		}, 0)
+		
+		// Use the maximum of both Supabase and localStorage
+		maxLessonNumber = Math.max(maxLessonNumber, maxFromLocal)
+		
+		// Create lesson with correct number (override localAddLesson's number)
+		const nextLessonNumber = maxLessonNumber + 1
+		const newLesson: Lesson = {
+			...lesson,
+			id: `lesson-${nextLessonNumber}`,
+			title: `Lesson ${nextLessonNumber}`,
+			subtitle: lesson.subtitle || '',
+			topic: (lesson as any).topic || ''
+		}
+		
+		// Add to localStorage
+		const updatedLocalLessons = [...localLessons, newLesson]
+		localSaveLessons(updatedLocalLessons)
+		
+		// Add to Supabase if configured
+		if (isSupabaseConfigured()) {
+			try {
+				const supabase = getSupabaseClient()
+				if (!supabase) return newLesson
 				
 				const user = getCurrentUser()
-				if (!user) return localLesson
+				if (!user) return newLesson
 				
 				const { data: { session } } = await supabase.auth.getSession()
-				if (!session?.user?.id) return localLesson
+				if (!session?.user?.id) return newLesson
 				
 				// Admin check - only admins can add global lessons
 				const { isAdmin } = await import('./authService')
 				if (!isAdmin(user)) {
 					console.warn('[lessonsService] Non-admin user attempted to add lesson')
-					return localLesson
+					return newLesson
 				}
 				
 				// Extract lesson number from id like "lesson-1" -> 1
-				const match = localLesson.id.match(/lesson-(\d+)/)
-				const lessonNumber = match ? parseInt(match[1], 10) : 1
+				const lessonNumber = nextLessonNumber
 				
 				const { error } = await supabase
 					.from('lessons')
@@ -459,13 +551,13 @@ class LocalLessonsService implements LessonsService {
 						created_by: session.user.id, // Admin who created it
 						composition_id: lesson.compositionId || null,
 						lesson_number: lessonNumber,
-						title: localLesson.title,
+						title: newLesson.title,
 						description: lesson.description || null,
 						difficulty: lesson.category, // beginner/intermediate/advanced
 						category: null, // Don't use category field - use topic instead
 						subtitle: lesson.subtitle || null,
 						topic: (lesson as any).topic || null, // Topic/category like "Progressions", "Melodies", etc.
-						custom_id: localLesson.id
+						custom_id: newLesson.id
 					})
 				
 				if (error) {
@@ -476,13 +568,19 @@ class LocalLessonsService implements LessonsService {
 			}
 		}
 		
-		return localLesson
+		return newLesson
 	}
 
 	async deleteLesson(lessonId: string): Promise<boolean> {
 		// Only admins can delete lessons (lessons are global)
 		// Delete from local first
 		const localResult = localDeleteLesson(lessonId)
+		
+		// Track deleted lesson ID in localStorage (similar to compositions)
+		const deletedIdsKey = 'deleted-lesson-ids'
+		const deletedIds = new Set<string>(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
+		deletedIds.add(lessonId)
+		localStorage.setItem(deletedIdsKey, JSON.stringify(Array.from(deletedIds)))
 		
 		if (isSupabaseConfigured()) {
 			try {
@@ -503,16 +601,22 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				// Delete from Supabase using custom_id (lessons are global, no user filter)
-				const { error } = await supabase
+				const { error, data } = await supabase
 					.from('lessons')
 					.delete()
 					.eq('custom_id', lessonId)
+					.select()
 				
 				if (error) {
 					console.warn('[lessonsService] Supabase error deleting lesson, using local result:', error)
+					// Even if Supabase deletion fails, we've tracked it in localStorage, so it won't show up
+				} else {
+					console.log(`[lessonsService] Deleted lesson ${lessonId} from Supabase. Rows deleted: ${data?.length || 0}`)
+					// If Supabase deletion succeeded, we can keep the ID in the deleted list as a safety measure
 				}
 			} catch (error) {
 				console.error('[lessonsService] Error deleting lesson from Supabase:', error)
+				// Even if Supabase deletion fails, we've tracked it in localStorage, so it won't show up
 			}
 		}
 		

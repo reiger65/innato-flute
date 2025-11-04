@@ -176,6 +176,10 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			for (const lesson of lessons) {
 				await deleteLesson(lesson.id)
 			}
+			
+			// Clear the deleted IDs list since all lessons are gone
+			localStorage.removeItem('deleted-lesson-ids')
+			
 			await loadLessonsData()
 			onSuccess()
 			onShowToast?.(`Deleted all ${lessons.length} lesson(s). You can now re-add them from the Composer.`, 'success')
