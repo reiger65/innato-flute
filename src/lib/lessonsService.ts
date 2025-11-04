@@ -162,10 +162,11 @@ class LocalLessonsService implements LessonsService {
 				const supabaseLessons = (data || []).map(item => {
 					// Extract lesson number from custom_id or lesson_number
 					const customId = item.custom_id || `lesson-${item.lesson_number}`
+					const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
 					
 					const lesson: Lesson = {
 						id: customId,
-						title: item.title || `Lesson ${item.lesson_number}`,
+						title: `Lesson ${lessonNum}`, // Always generate title from custom_id number, ignore Supabase title
 						subtitle: item.subtitle || '',
 						topic: item.topic || item.category || '', // Use topic field, fallback to category
 						description: item.description || '', // Preserve description
