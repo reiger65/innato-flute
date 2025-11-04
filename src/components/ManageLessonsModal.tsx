@@ -131,14 +131,24 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 
 		setLoading(true)
 		try {
-			// Don't update title - it's auto-generated and shouldn't change when editing other fields
-			// Only update the fields that were actually edited
-			await updateLesson(editingLesson.id, {
+			console.log('[ManageLessonsModal] Saving lesson edit:', {
+				id: editingLesson.id,
 				subtitle: editSubtitle.trim(),
 				topic: finalTopic,
 				description: editDescription.trim(),
 				category: editCategory
 			})
+			
+			// Update all fields including title if it was changed
+			const result = await updateLesson(editingLesson.id, {
+				title: editTitle.trim() || editingLesson.title, // Use edited title or fallback to current
+				subtitle: editSubtitle.trim(),
+				topic: finalTopic,
+				description: editDescription.trim(),
+				category: editCategory
+			})
+			
+			console.log('[ManageLessonsModal] Update result:', result)
 			
 			// Persist new category if provided
 			if (finalTopic) {
@@ -151,6 +161,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			await loadLessonsData()
 			setEditingLesson(null)
 			onSuccess()
+			onShowToast?.('Lesson updated successfully.', 'success')
 		} catch (error) {
 			console.error('Error updating lesson:', error)
 			onShowToast?.('Failed to update lesson. Please try again.', 'error')
@@ -556,18 +567,17 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 										<div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
 											<div>
 												<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
-													Title (Auto-generated)
+													Title
 												</label>
 												<input
 													type="text"
 													value={editTitle}
-													readOnly
+													onChange={(e) => setEditTitle(e.target.value)}
 													className="modal-input"
-													style={{ backgroundColor: 'rgba(0, 0, 0, 0.05)', cursor: 'not-allowed' }}
-													disabled
+													placeholder="e.g., Lesson 1"
 												/>
 												<p style={{ fontSize: 'var(--font-size-xs)', color: 'rgba(0, 0, 0, 0.5)', marginTop: 'var(--space-1)' }}>
-													Lesson titles are automatically generated based on their position in the list.
+													Note: Titles are usually auto-generated, but you can override them here.
 												</p>
 											</div>
 											<div>

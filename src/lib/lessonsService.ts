@@ -416,26 +416,34 @@ class LocalLessonsService implements LessonsService {
 				const updateData: any = {}
 				if (updates.title !== undefined) updateData.title = updates.title
 				if (updates.subtitle !== undefined) {
-					updateData.subtitle = updates.subtitle || null // Allow empty strings, convert to null for Supabase
+					// Preserve empty strings - only convert undefined to null
+					updateData.subtitle = updates.subtitle === '' ? null : updates.subtitle
 				}
 				if ((updates as any).topic !== undefined) {
-					updateData.topic = (updates as any).topic || null
+					updateData.topic = (updates as any).topic === '' ? null : (updates as any).topic
 					updateData.category = null // Don't use category field - use topic instead
 				}
 				if (updates.description !== undefined) {
-					updateData.description = updates.description || null
+					updateData.description = updates.description === '' ? null : updates.description
 				}
 				if (updates.category !== undefined) updateData.difficulty = updates.category // category maps to difficulty
 				if (updates.compositionId !== undefined) updateData.composition_id = updates.compositionId
 				
 				// Only update lesson_number if title actually changed (indicating a position change)
 				// Don't update lesson_number if we're just updating other fields like subtitle/description
-				// Get the current lesson to compare
-				const { data: currentLesson } = await supabase
-					.from('lessons')
-					.select('title, lesson_number')
-					.eq('custom_id', lessonId)
-					.single()
+				// Get the current lesson to compare - but don't fail if this query fails
+				let currentLesson = null
+				try {
+					const { data: lessonData } = await supabase
+						.from('lessons')
+						.select('title, lesson_number')
+						.eq('custom_id', lessonId)
+						.single()
+					currentLesson = lessonData
+				} catch (queryError) {
+					// Ignore query errors - we'll just skip lesson_number update
+					console.warn('[lessonsService] Could not fetch current lesson for comparison:', queryError)
+				}
 				
 				if (currentLesson && updates.title && updates.title !== currentLesson.title) {
 					// Title changed, so update lesson_number based on new position
@@ -450,6 +458,12 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				console.log(`[lessonsService] Updating lesson ${lessonId} with:`, updateData)
+				
+				// Only proceed with update if we have fields to update
+				if (Object.keys(updateData).length === 0) {
+					console.warn('[lessonsService] No fields to update for lesson', lessonId)
+					return localResult
+				}
 				
 				const { error, data } = await supabase
 					.from('lessons')
