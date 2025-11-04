@@ -12,6 +12,7 @@ interface UserWithStats extends User {
 	compositionsCount?: number
 	progressionsCount?: number
 	sharedItemsCount?: number
+	completedLessonsCount?: number
 	lastSignIn?: string
 }
 
@@ -63,12 +64,26 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 				const { data, error } = await supabase.from('profiles').select('id, email, username, role, created_at')
 				if (error) {
 					console.warn('[ManageUsersModal] Profiles table query error:', error)
+					// If profiles table doesn't exist, try to get emails from auth.users via a function
+					// But we can't do this from browser without admin API
 				} else {
 					profilesResult = { data, error: null }
 				}
 			} catch (err) {
 				// Profiles table might not exist, that's okay
 				console.log('[ManageUsersModal] Profiles table not found or not accessible:', err)
+			}
+			
+			// Try to get user emails from compositions table if they have user_email field
+			// This is a fallback if profiles table doesn't exist
+			let compositionsWithEmails: any[] = []
+			try {
+				const { data: compsData } = await supabase.from('compositions').select('user_id, user_email').limit(1000)
+				if (compsData) {
+					compositionsWithEmails = compsData.filter((c: any) => c.user_email)
+				}
+			} catch (err) {
+				// Ignore - compositions might not have user_email field
 			}
 
 			// Get users from all tables that might have user references
@@ -178,23 +193,37 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 						// Use profile data
 						user = {
 							id: profile.id,
-							email: profile.email || userId,
+							email: profile.email || `User ${userId.substring(0, 8)}...`,
 							username: profile.username,
 							role: profile.role || 'user',
 							createdAt: profile.created_at ? new Date(profile.created_at).getTime() : Date.now()
 						}
 					} else {
 						// Create basic user object
+						// First, try to get email from current session if this is the logged-in user
+						let userEmail = `user-${userId.substring(0, 8)}@...`
+						
+						if (session && session.user?.id === userId) {
+							// Current logged-in user - we have their email
+							userEmail = session.user.email || userEmail
+						} else {
+							// Check if we have email from compositions table (if user_email field exists)
+							const compWithEmail = compositionsWithEmails.find((c: any) => c.user_id === userId)
+							if (compWithEmail?.user_email) {
+								userEmail = compWithEmail.user_email
+							}
+						}
+						
 						user = {
 							id: userId,
-							email: userId, // Fallback: use ID as email if we can't get email
+							email: userEmail,
 							role: 'user',
 							createdAt: Date.now()
 						}
 						
 						// If this is the current user, we know their email from session
 						if (session && session.user?.id === userId) {
-							user.email = session.user.email || userId
+							user.email = session.user.email || userEmail
 							user.username = session.user.user_metadata?.username
 							user.role = session.user.user_metadata?.role || 'user'
 						}
@@ -208,15 +237,17 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 
 			// Load stats for each user
 			for (const user of usersList) {
-				const [compCount, progCount, sharedCount] = await Promise.all([
+				const [compCount, progCount, sharedCount, progressCount] = await Promise.all([
 					supabase.from('compositions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
 					supabase.from('progressions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-					supabase.from('shared_items').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
+					supabase.from('shared_items').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+					supabase.from('user_progress').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('completed', true)
 				])
 
 				user.compositionsCount = compCount.count || 0
 				user.progressionsCount = progCount.count || 0
 				user.sharedItemsCount = sharedCount.count || 0
+				user.completedLessonsCount = progressCount.count || 0
 			}
 
 			setUsers(usersList)
@@ -235,12 +266,6 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 		} finally {
 			setLoading(false)
 		}
-	}
-
-	const handleToggleAdmin = async (_user: UserWithStats) => {
-		onShowToast?.('User role management requires server-side admin API. This feature is not available in the browser.', 'error')
-		// Note: supabase.auth.admin methods require service role key (server-side only)
-		// This would need to be implemented via a server endpoint or Edge Function
 	}
 
 	const handleDeleteUser = async (_user: UserWithStats) => {
@@ -312,15 +337,28 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 											borderRadius: 'var(--radius-2)',
 											background: selectedUser?.id === user.id ? 'rgba(0, 0, 0, 0.05)' : 'var(--color-white)',
 											cursor: 'pointer',
-											transition: 'background 0.2s ease'
+											transition: 'background 0.2s ease',
+											display: 'flex',
+											gap: 'var(--space-3)',
+											alignItems: 'flex-start'
 										}}
 										onClick={() => setSelectedUser(user)}
 									>
-										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-											<div style={{ flex: 1 }}>
-												<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-													<h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)' }}>
-														{user.email}
+										<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flex: 1, minWidth: 0, gap: 'var(--space-3)' }}>
+											<div style={{ flex: 1, minWidth: 0 }}>
+												<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)', flexWrap: 'wrap' }}>
+													<h3 style={{ 
+														margin: 0, 
+														fontSize: 'var(--font-size-base)', 
+														fontWeight: 'var(--font-weight-semibold)',
+														wordBreak: 'break-word',
+														overflowWrap: 'break-word'
+													}}>
+														{user.email.includes('@') ? user.email : (
+															<span style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-sm)' }}>
+																{user.email}
+															</span>
+														)}
 													</h3>
 													{user.role === 'admin' && (
 														<span style={{
@@ -330,7 +368,8 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 															borderRadius: 'var(--radius-1)',
 															fontSize: 'var(--font-size-xs)',
 															fontWeight: 'var(--font-weight-semibold)',
-															textTransform: 'uppercase'
+															textTransform: 'uppercase',
+															whiteSpace: 'nowrap'
 														}}>
 															Admin
 														</span>
@@ -341,10 +380,18 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 														Username: {user.username}
 													</p>
 												)}
-												<div style={{ marginTop: 'var(--space-2)', display: 'flex', gap: 'var(--space-4)', fontSize: 'var(--font-size-xs)', color: 'rgba(0, 0, 0, 0.6)' }}>
+												<div style={{ 
+													marginTop: 'var(--space-2)', 
+													display: 'flex', 
+													flexWrap: 'wrap',
+													gap: 'var(--space-3)', 
+													fontSize: 'var(--font-size-xs)', 
+													color: 'rgba(0, 0, 0, 0.6)' 
+												}}>
 													<span>Compositions: {user.compositionsCount || 0}</span>
 													<span>Progressions: {user.progressionsCount || 0}</span>
 													<span>Shared: {user.sharedItemsCount || 0}</span>
+													<span>Completed Lessons: {user.completedLessonsCount || 0}</span>
 												</div>
 												{user.lastSignIn && (
 													<p style={{ margin: 'var(--space-1) 0 0 0', fontSize: 'var(--font-size-xs)', color: 'rgba(0, 0, 0, 0.5)' }}>
@@ -352,23 +399,7 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 													</p>
 												)}
 											</div>
-											<div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start' }}>
-												<button
-													className="btn-sm"
-													onClick={(e) => {
-														e.stopPropagation()
-														handleToggleAdmin(user)
-													}}
-													disabled={loading || user.id === currentUser?.id}
-													style={{
-														border: `2px solid ${user.role === 'admin' ? '#dc2626' : '#2563eb'}`,
-														color: user.role === 'admin' ? '#dc2626' : '#2563eb',
-														background: 'transparent'
-													}}
-													title={user.id === currentUser?.id ? 'Cannot change your own role' : user.role === 'admin' ? 'Remove admin' : 'Make admin'}
-												>
-													{user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
-												</button>
+											<div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-end', flexShrink: 0 }}>
 												{user.id !== currentUser?.id && (
 													<button
 														className="btn-sm"
@@ -380,7 +411,9 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 														style={{
 															border: '2px solid #dc2626',
 															color: '#dc2626',
-															background: 'transparent'
+															background: 'transparent',
+															whiteSpace: 'nowrap',
+															minWidth: '80px'
 														}}
 													>
 														Delete
