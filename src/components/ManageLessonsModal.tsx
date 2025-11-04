@@ -65,12 +65,19 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			const loadedLessons = await loadLessons()
 			console.log(`[ManageLessonsModal] Loaded ${loadedLessons.length} lessons:`, loadedLessons.map(l => ({ id: l.id, title: l.title, hasComposition: !!l.compositionId })))
 			
+			// Only filter dummy lessons if they're from localStorage, not from Supabase
+			// Supabase lessons should all be shown (they're already validated)
+			const validLessons = loadedLessons.filter(lesson => lesson.compositionId !== null)
+			if (validLessons.length !== loadedLessons.length) {
+				console.log(`[ManageLessonsModal] Filtered out ${loadedLessons.length - validLessons.length} dummy lessons (no compositionId)`)
+			}
+			
 			// Sort lessons by lesson number (lesson-1, lesson-2, etc.) so newest is last
 			const getLessonNumber = (id: string): number => {
 				const match = id.match(/lesson-(\d+)/)
 				return match ? parseInt(match[1], 10) : 0
 			}
-			const sortedLessons = [...loadedLessons].sort((a, b) => {
+			const sortedLessons = [...validLessons].sort((a, b) => {
 				return getLessonNumber(a.id) - getLessonNumber(b.id)
 			})
 			setLessons(sortedLessons)
@@ -142,6 +149,36 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		} catch (error) {
 			console.error('Error deleting lesson:', error)
 			onShowToast?.('Failed to delete lesson. Please try again.', 'error')
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	const handleCleanupDummyLessons = async () => {
+		const dummyCount = lessons.filter(l => !l.compositionId).length
+		if (dummyCount === 0) {
+			onShowToast?.('No dummy lessons to clean up.', 'info')
+			return
+		}
+		
+		if (!window.confirm(`Delete ${dummyCount} dummy lesson(s) without compositions? This action cannot be undone.`)) {
+			return
+		}
+
+		setLoading(true)
+		try {
+			// Delete all dummy lessons
+			for (const lesson of lessons) {
+				if (!lesson.compositionId) {
+					await deleteLesson(lesson.id)
+				}
+			}
+			await loadLessonsData()
+			onSuccess()
+			onShowToast?.(`Deleted ${dummyCount} dummy lesson(s).`, 'success')
+		} catch (error) {
+			console.error('Error cleaning up dummy lessons:', error)
+			onShowToast?.('Failed to clean up dummy lessons. Please try again.', 'error')
 		} finally {
 			setLoading(false)
 		}
@@ -525,6 +562,21 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				</div>
 
 				<div className="modal-footer">
+					{lessons.filter(l => !l.compositionId).length > 0 && (
+						<button 
+							className="btn-sm" 
+							onClick={handleCleanupDummyLessons} 
+							disabled={loading}
+							style={{ 
+								marginRight: 'auto',
+								background: 'transparent',
+								border: '2px solid #dc2626',
+								color: '#dc2626'
+							}}
+						>
+							Delete {lessons.filter(l => !l.compositionId).length} Dummy Lesson(s)
+						</button>
+					)}
 					<button className="btn-sm" onClick={onClose} disabled={loading}>
 						Close
 					</button>

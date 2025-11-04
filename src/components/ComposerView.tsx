@@ -1954,7 +1954,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 												</div>
 											</div>
 											<div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexShrink: 0 }}>
-												{isAdmin(currentUser) && (
+												{currentUser && isAdmin(currentUser) && (
 													<button
 														className="icon-btn-sm"
 														onClick={(e) => {

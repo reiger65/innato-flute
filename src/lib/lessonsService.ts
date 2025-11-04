@@ -61,6 +61,17 @@ export async function syncLocalLessonsToSupabase(): Promise<number> {
 		const localLessons = localLoadLessons()
 		if (localLessons.length === 0) return 0
 		
+		// Filter out dummy lessons (those without compositionId) before syncing
+		const validLocalLessons = localLessons.filter(lesson => lesson.compositionId !== null)
+		if (validLocalLessons.length === 0) {
+			console.log('[lessonsService] No valid lessons to sync (all are dummy lessons without compositionId)')
+			return 0
+		}
+		
+		if (validLocalLessons.length !== localLessons.length) {
+			console.log(`[lessonsService] Filtered out ${localLessons.length - validLocalLessons.length} dummy lessons before syncing`)
+		}
+		
 		// Get existing Supabase lessons (by custom_id to avoid duplicates)
 		// Lessons are global, so don't filter by created_by
 		const { data: existingData, error: existingError } = await supabase
@@ -77,14 +88,14 @@ export async function syncLocalLessonsToSupabase(): Promise<number> {
 		
 		// Upload local lessons that don't exist in Supabase
 		let syncedCount = 0
-		for (const local of localLessons) {
+		for (const local of validLocalLessons) {
 			if (existingCustomIds.has(local.id)) {
 				continue // Already exists
 			}
 			
 			// Extract lesson number from id like "lesson-1" -> 1
 			const match = local.id.match(/lesson-(\d+)/)
-			const lessonNumber = match ? parseInt(match[1], 10) : localLessons.indexOf(local) + 1
+			const lessonNumber = match ? parseInt(match[1], 10) : validLocalLessons.indexOf(local) + 1
 			
 			try {
 				const { error } = await supabase
@@ -170,12 +181,28 @@ class LocalLessonsService implements LessonsService {
 							subtitle: lesson.subtitle,
 							description: lesson.description?.substring(0, 50) + '...',
 							topic: lesson.topic,
-							category: lesson.category
+							category: lesson.category,
+							compositionId: lesson.compositionId
 						})
 					}
 					
 					return lesson
 				})
+				
+				// Don't filter out lessons - show all lessons from Supabase
+				// Only filter dummy lessons when they're created locally, not when loading from Supabase
+				console.log(`[lessonsService] Loaded ${supabaseLessons.length} lessons from Supabase`)
+				
+				// Only clean up localStorage dummy lessons if Supabase has valid lessons
+				if (supabaseLessons.length > 0) {
+					const localLessonsCheck = localLoadLessons()
+					const localDummyCount = localLessonsCheck.filter(l => !l.compositionId).length
+					if (localDummyCount > 0) {
+						console.log(`[lessonsService] Found ${localDummyCount} dummy lessons in localStorage, cleaning up...`)
+						const validLocalLessons = localLessonsCheck.filter(l => l.compositionId !== null)
+						localSaveLessons(validLocalLessons)
+					}
+				}
 				
 				// If admin is logged in and Supabase has lessons, check if local lessons need syncing
 				const user = getCurrentUser()
@@ -183,9 +210,9 @@ class LocalLessonsService implements LessonsService {
 					const { isAdmin } = await import('./authService')
 					if (isAdmin(user) && supabaseLessons.length > 0) {
 						// Check if there are local lessons not in Supabase
-						const localLessons = localLoadLessons()
+						const localLessonsForSync = localLoadLessons()
 						const supabaseCustomIds = new Set(supabaseLessons.map(l => l.id))
-						const localOnly = localLessons.filter(l => !supabaseCustomIds.has(l.id))
+						const localOnly = localLessonsForSync.filter(l => !supabaseCustomIds.has(l.id) && l.compositionId !== null)
 						
 						// Auto-sync local lessons that aren't in Supabase (one-time per session)
 						if (localOnly.length > 0) {
@@ -203,11 +230,11 @@ class LocalLessonsService implements LessonsService {
 										
 										if (reloadData) {
 											sessionStorage.setItem(syncKey, 'true')
-											return (reloadData || []).map(item => {
+											const reloadedLessons = (reloadData || []).map(item => {
 												const customId = item.custom_id || `lesson-${item.lesson_number}`
 												return {
 													id: customId,
-													title: item.title,
+													title: item.title || `Lesson ${item.lesson_number}`,
 													subtitle: item.subtitle || '',
 													topic: item.topic || item.category || '',
 													description: item.description || '',
@@ -216,7 +243,8 @@ class LocalLessonsService implements LessonsService {
 													unlocked: false,
 													completed: false
 												} as Lesson
-											})
+											}).filter(lesson => lesson.compositionId !== null)
+											return reloadedLessons
 										}
 									}
 								} catch (syncError) {
@@ -234,17 +262,21 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				// Fallback to local if Supabase is empty
-				const localLessons = localLoadLessons()
-				console.log(`[lessonsService] Supabase empty, loaded ${localLessons.length} lessons from localStorage`)
-				return localLessons
+				const localLessonsFallback = localLoadLessons()
+				// Only filter dummy lessons from localStorage fallback, not from Supabase
+				const validLocalLessonsFallback = localLessonsFallback.filter(l => l.compositionId !== null)
+				console.log(`[lessonsService] Supabase empty, loaded ${validLocalLessonsFallback.length} lessons from localStorage`)
+				return validLocalLessonsFallback
 			} catch (error) {
 				console.error('[lessonsService] Error loading from Supabase:', error)
 				// Always fallback to localStorage on error
-				return localLoadLessons()
+				const localLessons = localLoadLessons()
+				return localLessons.filter(l => l.compositionId !== null)
 			}
 		}
 		
-		return localLoadLessons()
+		const localLessons = localLoadLessons()
+		return localLessons.filter(l => l.compositionId !== null)
 	}
 
 	async saveLessons(lessons: Lesson[]): Promise<void> {
@@ -484,8 +516,17 @@ class LocalLessonsService implements LessonsService {
 		// Load lessons (from Supabase if available - global, no auth required)
 		let lessons = await this.loadLessons()
 		
-		// Extra safety: filter out any dummy lessons that might still exist
-		lessons = lessons.filter(lesson => lesson.compositionId !== null)
+		// Only filter dummy lessons when they're created locally, not when loading from Supabase
+		// This ensures we don't accidentally filter out valid lessons from the database
+		// Filter only applies to localStorage fallback
+		if (lessons.length > 0) {
+			// Check if any lessons are from localStorage (they might be dummy)
+			const hasLocalDummy = lessons.some(l => !l.compositionId)
+			if (hasLocalDummy) {
+				// Only filter if we're using localStorage fallback
+				lessons = lessons.filter(lesson => lesson.compositionId !== null)
+			}
+		}
 		
 		// Load progress (user-specific, requires auth, falls back to localStorage)
 		const { loadLessonProgress } = await import('./lessonProgressService')
