@@ -54,18 +54,25 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 		try {
 			// Note: supabase.auth.admin methods require service role key (server-side only)
 			// In browser, we can only get users from our own tables
-			// Strategy: Get users from ALL tables that have user_id or created_by fields
+			// Strategy: Try to get ALL users from profiles table first, then supplement with users from content tables
 			
 			// Try to get users from profiles table first if it exists
+			// This should contain all registered users
 			let profilesResult: any = null
 			try {
-				profilesResult = await supabase.from('profiles').select('id, email, username, role, created_at')
+				const { data, error } = await supabase.from('profiles').select('id, email, username, role, created_at')
+				if (error) {
+					console.warn('[ManageUsersModal] Profiles table query error:', error)
+				} else {
+					profilesResult = { data, error: null }
+				}
 			} catch (err) {
 				// Profiles table might not exist, that's okay
-				console.log('[ManageUsersModal] Profiles table not found')
+				console.log('[ManageUsersModal] Profiles table not found or not accessible:', err)
 			}
 
 			// Get users from all tables that might have user references
+			// This helps us find users who have created content even if profiles table doesn't exist
 			const [compositionsResult, progressionsResult, sharedItemsResult, userProgressResult] = await Promise.all([
 				supabase.from('compositions').select('user_id').limit(1000),
 				supabase.from('progressions').select('user_id').limit(1000),
@@ -90,31 +97,56 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 			// Get unique user IDs from all sources
 			const userIds = new Set<string>()
 			
-			// Add users from profiles table
-			if (profilesResult?.data) {
+			// PRIORITY 1: Add users from profiles table (should have all registered users)
+			if (profilesResult?.data && Array.isArray(profilesResult.data)) {
 				profilesResult.data.forEach((profile: any) => {
 					if (profile.id) userIds.add(profile.id)
 				})
+				console.log(`[ManageUsersModal] Found ${profilesResult.data.length} user(s) in profiles table`)
 			}
 			
-			// Add users from compositions/progressions
+			// PRIORITY 2: Add users from compositions/progressions (users who created content)
+			let contentUserCount = 0
 			compositionsResult.data?.forEach(comp => {
-				if (comp.user_id) userIds.add(comp.user_id)
+				if (comp.user_id && !userIds.has(comp.user_id)) {
+					userIds.add(comp.user_id)
+					contentUserCount++
+				}
 			})
 			progressionsResult.data?.forEach(prog => {
-				if (prog.user_id) userIds.add(prog.user_id)
+				if (prog.user_id && !userIds.has(prog.user_id)) {
+					userIds.add(prog.user_id)
+					contentUserCount++
+				}
 			})
 			
-			// Add users from shared_items
+			// PRIORITY 3: Add users from shared_items
 			sharedItemsResult.data?.forEach(item => {
-				if (item.user_id) userIds.add(item.user_id)
+				if (item.user_id && !userIds.has(item.user_id)) {
+					userIds.add(item.user_id)
+					contentUserCount++
+				}
 			})
 			
-			// Add users from user_progress
+			// PRIORITY 4: Add users from user_progress (users who completed lessons)
 			userProgressResult.data?.forEach(progress => {
-				if (progress.user_id) userIds.add(progress.user_id)
+				if (progress.user_id && !userIds.has(progress.user_id)) {
+					userIds.add(progress.user_id)
+					contentUserCount++
+				}
 			})
+			
+			if (contentUserCount > 0) {
+				console.log(`[ManageUsersModal] Found ${contentUserCount} additional user(s) from content tables`)
+			}
 
+			// PRIORITY 5: Always add the currently logged-in user to the list, even if they haven't created content
+			const { data: { session } } = await supabase.auth.getSession()
+			if (session?.user?.id && !userIds.has(session.user.id)) {
+				userIds.add(session.user.id)
+				console.log(`[ManageUsersModal] Added current logged-in user: ${session.user.email}`)
+			}
+			
 			if (userIds.size === 0) {
 				setUsers([])
 				setLoading(false)
@@ -134,9 +166,6 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 					}
 				})
 			}
-			
-			// Get current session to see if we can get user info
-			const { data: { session } } = await supabase.auth.getSession()
 			
 			// Create user objects
 			for (const userId of userIds) {
@@ -164,7 +193,7 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 						}
 						
 						// If this is the current user, we know their email from session
-						if (session?.user?.id === userId) {
+						if (session && session.user?.id === userId) {
 							user.email = session.user.email || userId
 							user.username = session.user.user_metadata?.username
 							user.role = session.user.user_metadata?.role || 'user'
@@ -194,6 +223,11 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 			
 			if (usersList.length > 0 && usersList.some(u => u.email === u.id)) {
 				onShowToast?.('Note: Some user emails may not be available. Full user management requires server-side admin API.', 'info')
+			}
+			
+			// Show info about why some users might not appear
+			if (usersList.length > 0) {
+				console.log(`[ManageUsersModal] Loaded ${usersList.length} user(s). Note: Only users who have created content or made progress appear here.`)
 			}
 		} catch (error) {
 			console.error('[ManageUsersModal] Error loading users:', error)
@@ -252,7 +286,13 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 						</div>
 					) : users.length === 0 ? (
 						<div style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
-							<p>No users found.</p>
+							<p style={{ marginBottom: 'var(--space-2)', fontWeight: 'var(--font-weight-semibold)' }}>No users found.</p>
+							<p style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(0, 0, 0, 0.7)', lineHeight: 1.6 }}>
+								Users will appear here once they create compositions, progressions, share items, or make progress in lessons.
+							</p>
+							<p style={{ fontSize: 'var(--font-size-xs)', color: 'rgba(0, 0, 0, 0.5)', marginTop: 'var(--space-3)' }}>
+								Note: Full user management (viewing all users regardless of activity) requires server-side admin API access.
+							</p>
 						</div>
 					) : (
 						<div>
