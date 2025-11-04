@@ -13,6 +13,7 @@ import {
 	getCurrentUser as supabaseGetCurrentUser,
 	signUp as supabaseSignUp,
 	signIn as supabaseSignIn,
+	signInWithMagicLink as supabaseSignInWithMagicLink,
 	signOut as supabaseSignOut,
 	isAdmin as supabaseIsAdmin
 } from './supabaseAuthService'
@@ -95,6 +96,17 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 		return await supabaseSignIn(email, password)
 	}
 	return await localSignIn(email, password)
+}
+
+/**
+ * Sign in with magic link (passwordless)
+ * Uses Supabase when available
+ */
+export async function signInWithMagicLink(email: string): Promise<AuthResult> {
+	if (isSupabaseConfigured()) {
+		return await supabaseSignInWithMagicLink(email)
+	}
+	return { success: false, error: 'Magic link not available. Please use password login.' }
 }
 
 /**

@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import type { User } from '../lib/authService'
-import { signUp, signIn, signOut, getCurrentUser } from '../lib/authService'
+import { signUp, signIn, signInWithMagicLink, signOut, getCurrentUser } from '../lib/authService'
 
 interface LoginPanelProps {
 	onClose: () => void
 	onAuthChange: (user: User | null) => void
 }
 
-type ViewMode = 'login' | 'signup'
+type ViewMode = 'login' | 'signup' | 'magiclink'
 
 export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 	const [viewMode, setViewMode] = useState<ViewMode>('login')
@@ -16,6 +16,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 	const [username, setUsername] = useState('')
 	const [error, setError] = useState('')
 	const [loading, setLoading] = useState(false)
+	const [magicLinkSent, setMagicLinkSent] = useState(false)
 	const [currentUser, setCurrentUser] = useState<User | null>(null)
 
 	// Check for existing session on mount
@@ -23,6 +24,28 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		const user = getCurrentUser()
 		setCurrentUser(user)
 		onAuthChange(user)
+	}, [onAuthChange])
+
+	// Handle magic link callback from URL
+	useEffect(() => {
+		const handleMagicLinkCallback = async () => {
+			const urlParams = new URLSearchParams(window.location.search)
+			const accessToken = urlParams.get('access_token')
+			const type = urlParams.get('type')
+			
+			if (accessToken && type === 'magiclink') {
+				// User clicked magic link, they're now authenticated
+				const user = getCurrentUser()
+				if (user) {
+					setCurrentUser(user)
+					onAuthChange(user)
+					// Clean up URL
+					window.history.replaceState({}, document.title, window.location.pathname)
+				}
+			}
+		}
+		
+		handleMagicLinkCallback()
 	}, [onAuthChange])
 
 	const handleSignUp = async (e: React.FormEvent) => {
@@ -86,6 +109,27 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		}
 	}
 
+	const handleMagicLink = async (e: React.FormEvent) => {
+		e.preventDefault()
+		setError('')
+		setLoading(true)
+
+		if (!email) {
+			setError('Please enter your email address')
+			setLoading(false)
+			return
+		}
+
+		const result = await signInWithMagicLink(email)
+		setLoading(false)
+
+		if (result.success) {
+			setMagicLinkSent(true)
+		} else {
+			setError(result.error || 'Failed to send magic link')
+		}
+	}
+
 	const handleSignOut = async () => {
 		await signOut()
 		setCurrentUser(null)
@@ -98,6 +142,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		setEmail('')
 		setPassword('')
 		setUsername('')
+		setMagicLinkSent(false)
 	}
 
 	return (
@@ -122,10 +167,30 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 					{currentUser ? (
 						// Logged in view
 						<div>
-							<div style={{ marginBottom: '24px', padding: '16px', border: '2px solid var(--color-black)', borderRadius: '8px' }}>
-								<p style={{ marginBottom: '8px', fontWeight: 'var(--font-weight-semibold)' }}>Logged in as:</p>
-								<p style={{ marginBottom: '4px', fontSize: 'var(--font-size-base)' }}>{currentUser.username || currentUser.email}</p>
-								<p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-black)', opacity: 0.7 }}>{currentUser.email}</p>
+							<div style={{ 
+								marginBottom: 'var(--space-4)', 
+								padding: 'var(--space-4)', 
+								border: 'var(--border-2) solid var(--color-black)', 
+								borderRadius: 'var(--radius-2)',
+								background: 'var(--color-white)'
+							}}>
+								<p style={{ 
+									marginBottom: 'var(--space-2)', 
+									fontSize: 'var(--font-size-xs)', 
+									fontWeight: 'var(--font-weight-semibold)',
+									textTransform: 'uppercase',
+									letterSpacing: '0.5px',
+									color: 'rgba(0, 0, 0, 0.6)'
+								}}>Logged in as</p>
+								<p style={{ 
+									marginBottom: 'var(--space-1)', 
+									fontSize: 'var(--font-size-base)', 
+									fontWeight: 'var(--font-weight-semibold)'
+								}}>{currentUser.username || currentUser.email}</p>
+								<p style={{ 
+									fontSize: 'var(--font-size-sm)', 
+									color: 'rgba(0, 0, 0, 0.7)'
+								}}>{currentUser.email}</p>
 							</div>
 							<button
 								className="btn"
@@ -135,10 +200,58 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 								Sign Out
 							</button>
 						</div>
+					) : magicLinkSent ? (
+						// Magic link sent confirmation
+						<div style={{ textAlign: 'center', padding: 'var(--space-6) 0' }}>
+							<div style={{ 
+								marginBottom: 'var(--space-4)',
+								width: '64px',
+								height: '64px',
+								margin: '0 auto var(--space-4)',
+								borderRadius: '50%',
+								background: 'var(--color-black)',
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								color: 'var(--color-white)'
+							}}>
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
+									<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+									<polyline points="22,6 12,13 2,6"></polyline>
+								</svg>
+							</div>
+							<h3 style={{ 
+								fontSize: 'var(--font-size-lg)', 
+								fontWeight: 'var(--font-weight-bold)',
+								marginBottom: 'var(--space-2)'
+							}}>Check your email</h3>
+							<p style={{ 
+								fontSize: 'var(--font-size-sm)', 
+								color: 'rgba(0, 0, 0, 0.7)',
+								marginBottom: 'var(--space-4)',
+								lineHeight: 1.6
+							}}>
+								We've sent a magic link to <strong>{email}</strong>. Click the link in the email to sign in.
+							</p>
+							<button
+								className="btn-sm"
+								onClick={() => switchMode('login')}
+								style={{ width: '100%' }}
+							>
+								Back to login
+							</button>
+						</div>
 					) : (
-						// Login/Signup view
+						// Login/Signup/Magic Link view
 						<div>
-							<div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid var(--color-black)', paddingBottom: '12px' }}>
+							{/* Tab Navigation */}
+							<div style={{ 
+								display: 'flex', 
+								gap: 'var(--space-1)', 
+								marginBottom: 'var(--space-4)', 
+								borderBottom: 'var(--border-2) solid var(--color-black)',
+								paddingBottom: 'var(--space-2)'
+							}}>
 								<button
 									className={`tab ${viewMode === 'login' ? 'is-active' : ''}`}
 									onClick={() => switchMode('login')}
@@ -153,12 +266,32 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 								>
 									Sign Up
 								</button>
+								<button
+									className={`tab ${viewMode === 'magiclink' ? 'is-active' : ''}`}
+									onClick={() => switchMode('magiclink')}
+									style={{ flex: 1 }}
+									title="Passwordless login"
+								>
+									Magic Link
+								</button>
 							</div>
 
-							<form onSubmit={viewMode === 'login' ? handleSignIn : handleSignUp}>
+							{/* Form */}
+							<form onSubmit={
+								viewMode === 'magiclink' ? handleMagicLink :
+								viewMode === 'login' ? handleSignIn : handleSignUp
+							}>
 								{viewMode === 'signup' && (
-									<div style={{ marginBottom: '16px' }}>
-										<label style={{ display: 'block', marginBottom: '8px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+									<div style={{ marginBottom: 'var(--space-3)' }}>
+										<label style={{ 
+											display: 'block', 
+											marginBottom: 'var(--space-1)', 
+											fontSize: 'var(--font-size-xs)', 
+											fontWeight: 'var(--font-weight-semibold)',
+											textTransform: 'uppercase',
+											letterSpacing: '0.5px',
+											color: 'rgba(0, 0, 0, 0.7)'
+										}}>
 											Username (optional)
 										</label>
 										<input
@@ -166,19 +299,21 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 											value={username}
 											onChange={(e) => setUsername(e.target.value)}
 											placeholder="Choose a username"
-											style={{
-												width: '100%',
-												padding: '8px 12px',
-												border: '2px solid var(--color-black)',
-												borderRadius: '4px',
-												fontSize: 'var(--font-size-sm)'
-											}}
+											className="modal-input"
 										/>
 									</div>
 								)}
 
-								<div style={{ marginBottom: '16px' }}>
-									<label style={{ display: 'block', marginBottom: '8px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+								<div style={{ marginBottom: 'var(--space-3)' }}>
+									<label style={{ 
+										display: 'block', 
+										marginBottom: 'var(--space-1)', 
+										fontSize: 'var(--font-size-xs)', 
+										fontWeight: 'var(--font-weight-semibold)',
+										textTransform: 'uppercase',
+										letterSpacing: '0.5px',
+										color: 'rgba(0, 0, 0, 0.7)'
+									}}>
 										Email
 									</label>
 									<input
@@ -187,44 +322,72 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 										onChange={(e) => setEmail(e.target.value)}
 										placeholder="your@email.com"
 										required
-										style={{
-											width: '100%',
-											padding: '8px 12px',
-											border: '2px solid var(--color-black)',
-											borderRadius: '4px',
-											fontSize: 'var(--font-size-sm)'
-										}}
+										className="modal-input"
+										autoComplete="email"
 									/>
 								</div>
 
-								<div style={{ marginBottom: '20px' }}>
-									<label style={{ display: 'block', marginBottom: '8px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
-										Password
-									</label>
-									<input
-										type="password"
-										value={password}
-										onChange={(e) => setPassword(e.target.value)}
-										placeholder="••••••••"
-										required
-										minLength={6}
-										style={{
-											width: '100%',
-											padding: '8px 12px',
-											border: '2px solid var(--color-black)',
-											borderRadius: '4px',
-											fontSize: 'var(--font-size-sm)'
-										}}
-									/>
-								</div>
+								{viewMode !== 'magiclink' && (
+									<div style={{ marginBottom: 'var(--space-4)' }}>
+										<label style={{ 
+											display: 'block', 
+											marginBottom: 'var(--space-1)', 
+											fontSize: 'var(--font-size-xs)', 
+											fontWeight: 'var(--font-weight-semibold)',
+											textTransform: 'uppercase',
+											letterSpacing: '0.5px',
+											color: 'rgba(0, 0, 0, 0.7)'
+										}}>
+											Password
+										</label>
+										<input
+											type="password"
+											value={password}
+											onChange={(e) => setPassword(e.target.value)}
+											placeholder="••••••••"
+											required
+											minLength={6}
+											className="modal-input"
+											autoComplete={viewMode === 'signup' ? 'new-password' : 'current-password'}
+										/>
+										{viewMode === 'signup' && (
+											<p style={{ 
+												marginTop: 'var(--space-1)', 
+												fontSize: 'var(--font-size-xs)', 
+												color: 'rgba(0, 0, 0, 0.6)'
+											}}>
+												Minimum 6 characters
+											</p>
+										)}
+									</div>
+								)}
+
+								{viewMode === 'magiclink' && (
+									<div style={{ 
+										marginBottom: 'var(--space-4)',
+										padding: 'var(--space-3)',
+										background: 'rgba(0, 0, 0, 0.05)',
+										borderRadius: 'var(--radius-2)',
+										border: 'var(--border-1) solid rgba(0, 0, 0, 0.1)'
+									}}>
+										<p style={{ 
+											fontSize: 'var(--font-size-xs)', 
+											color: 'rgba(0, 0, 0, 0.7)',
+											margin: 0,
+											lineHeight: 1.5
+										}}>
+											✨ No password needed! We'll send you a secure link to sign in.
+										</p>
+									</div>
+								)}
 
 								{error && (
 									<div style={{ 
-										marginBottom: '16px', 
-										padding: '12px', 
+										marginBottom: 'var(--space-3)', 
+										padding: 'var(--space-3)', 
 										background: 'var(--color-white)', 
-										border: '2px solid var(--color-black)', 
-										borderRadius: '4px',
+										border: 'var(--border-2) solid var(--color-black)', 
+										borderRadius: 'var(--radius-2)',
 										color: 'var(--color-black)',
 										fontSize: 'var(--font-size-sm)'
 									}}>
@@ -236,10 +399,29 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 									type="submit"
 									className="btn"
 									disabled={loading}
-									style={{ width: '100%' }}
+									style={{ width: '100%', marginBottom: 'var(--space-3)' }}
 								>
-									{loading ? 'Loading...' : viewMode === 'login' ? 'Sign In' : 'Create Account'}
+									{loading ? 'Loading...' : 
+									 viewMode === 'magiclink' ? 'Send Magic Link' :
+									 viewMode === 'login' ? 'Sign In' : 'Create Account'}
 								</button>
+
+								{viewMode === 'magiclink' && (
+									<div style={{ 
+										marginTop: 'var(--space-4)',
+										paddingTop: 'var(--space-4)',
+										borderTop: 'var(--border-1) solid rgba(0, 0, 0, 0.2)'
+									}}>
+										<button
+											type="button"
+											className="btn-sm"
+											onClick={() => switchMode('login')}
+											style={{ width: '100%' }}
+										>
+											Use password instead
+										</button>
+									</div>
+								)}
 							</form>
 						</div>
 					)}
@@ -248,5 +430,3 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		</>
 	)
 }
-
-

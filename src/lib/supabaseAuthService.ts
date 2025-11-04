@@ -155,6 +155,39 @@ export async function signUp(email: string, password: string, username?: string)
 }
 
 /**
+ * Sign in with magic link (passwordless)
+ */
+export async function signInWithMagicLink(email: string): Promise<AuthResult> {
+	if (isSupabaseConfigured()) {
+		const supabase = getSupabaseClient()
+		
+		if (supabase) {
+			try {
+				const { error } = await supabase.auth.signInWithOtp({
+					email,
+					options: {
+						emailRedirectTo: `${window.location.origin}`,
+						shouldCreateUser: true
+					}
+				})
+				
+				if (error) {
+					return { success: false, error: error.message }
+				}
+				
+				// Magic link sent successfully
+				return { success: true, user: undefined }
+			} catch (error) {
+				console.error('Magic link error:', error)
+				return { success: false, error: 'Failed to send magic link. Please try again.' }
+			}
+		}
+	}
+	
+	return { success: false, error: 'Magic link not available. Please use password login.' }
+}
+
+/**
  * Sign in with Supabase or localStorage
  */
 export async function signIn(email: string, password: string): Promise<AuthResult> {

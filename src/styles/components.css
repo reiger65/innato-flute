@@ -360,16 +360,23 @@ select.btn-sm:active {
 .modal-input {
 	width: 100%;
 	padding: var(--space-2) var(--space-3);
-	font-size: var(--font-size-xs);
+	font-size: var(--font-size-sm);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
-	margin-bottom: var(--space-3);
 	font-family: inherit;
+	background: var(--color-white);
+	transition: all 0.2s ease;
+	box-sizing: border-box;
 }
 
 .modal-input:focus {
 	outline: none;
 	border-color: var(--color-black);
+	box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+}
+
+.modal-input::placeholder {
+	color: rgba(0, 0, 0, 0.4);
 }
 
 .modal-content {
@@ -1429,13 +1436,14 @@ select.btn-sm:active {
 	align-items: center;
 	margin-bottom: var(--space-4);
 	padding-bottom: var(--space-3);
-	border-bottom: var(--border-1) solid var(--color-black);
+	border-bottom: var(--border-2) solid var(--color-black);
 }
 
 .panel-title {
-	font-size: var(--font-size-lg);
+	font-size: var(--font-size-xl);
 	font-weight: var(--font-weight-bold);
 	margin: 0;
+	letter-spacing: -0.5px;
 }
 
 /* --- Drone Player --- */
