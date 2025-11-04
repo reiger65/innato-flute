@@ -1316,14 +1316,14 @@ export default function App() {
 													{lesson.subtitle}
 												</p>
 											)}
-											{(lesson as any).topic && (
+											{lesson.topic && (
 												<p style={{ 
 													margin: '2px 0 0 0',
 													fontSize: 'var(--font-size-xs)', 
 													color: 'rgba(0, 0, 0, 0.8)',
 													fontWeight: 'var(--font-weight-semibold)'
 												}}>
-													{(lesson as any).topic}
+													{lesson.topic}
 												</p>
 											)}
 											<p className="lesson-card-category">{lesson.category}</p>
