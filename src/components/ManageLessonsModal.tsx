@@ -65,11 +65,19 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			const loadedLessons = await loadLessons()
 			console.log(`[ManageLessonsModal] Loaded ${loadedLessons.length} lessons:`, loadedLessons.map(l => ({ id: l.id, title: l.title, hasComposition: !!l.compositionId })))
 			
+			// Deduplicate lessons by ID (keep first occurrence)
+			const uniqueLessons = loadedLessons.filter((lesson, index, self) => 
+				index === self.findIndex(l => l.id === lesson.id)
+			)
+			if (uniqueLessons.length !== loadedLessons.length) {
+				console.log(`[ManageLessonsModal] Removed ${loadedLessons.length - uniqueLessons.length} duplicate lesson(s)`)
+			}
+			
 			// Only filter dummy lessons if they're from localStorage, not from Supabase
 			// Supabase lessons should all be shown (they're already validated)
-			const validLessons = loadedLessons.filter(lesson => lesson.compositionId !== null)
-			if (validLessons.length !== loadedLessons.length) {
-				console.log(`[ManageLessonsModal] Filtered out ${loadedLessons.length - validLessons.length} dummy lessons (no compositionId)`)
+			const validLessons = uniqueLessons.filter(lesson => lesson.compositionId !== null)
+			if (validLessons.length !== uniqueLessons.length) {
+				console.log(`[ManageLessonsModal] Filtered out ${uniqueLessons.length - validLessons.length} dummy lessons (no compositionId)`)
 			}
 			
 			// Sort lessons by lesson number (lesson-1, lesson-2, etc.) so newest is last
