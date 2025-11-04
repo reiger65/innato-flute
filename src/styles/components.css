@@ -1192,7 +1192,7 @@ select.btn-sm:active {
 .lesson-card {
 	position: relative;
 	flex-shrink: 0;
-	width: 200px;
+	width: 280px;
 	padding: var(--space-4);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
@@ -2296,6 +2296,6 @@ select.btn-sm:active {
 	}
 
 	.lesson-card {
-		width: 160px;
+		width: 220px;
 	}
 }
