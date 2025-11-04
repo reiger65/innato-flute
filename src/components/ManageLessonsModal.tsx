@@ -88,12 +88,13 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				console.log(`[ManageLessonsModal] Removed ${loadedLessons.length - uniqueLessons.length} duplicate lesson(s)`)
 			}
 			
-			// Only filter dummy lessons if they're from localStorage, not from Supabase
-			// Supabase lessons should all be shown (they're already validated)
-			const validLessons = uniqueLessons.filter(lesson => lesson.compositionId !== null)
-			if (validLessons.length !== uniqueLessons.length) {
-				console.log(`[ManageLessonsModal] Filtered out ${uniqueLessons.length - validLessons.length} dummy lessons (no compositionId)`)
-			}
+			// IMPORTANT: Don't filter out lessons by compositionId - show all lessons from Supabase
+			// Lessons from Supabase are valid even if they don't have a compositionId yet
+			// Only filter dummy lessons if they're explicitly from localStorage (which we can't distinguish here)
+			// For now, show all lessons - if a lesson doesn't have compositionId, it might be valid but just not assigned yet
+			const validLessons = uniqueLessons
+			
+			console.log(`[ManageLessonsModal] Showing ${validLessons.length} lessons (no filtering by compositionId)`)
 			
 			// Sort lessons by lesson number (lesson-1, lesson-2, etc.) so newest is last
 			const getLessonNumber = (id: string): number => {

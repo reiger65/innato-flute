@@ -266,7 +266,7 @@ class LocalLessonsService implements LessonsService {
 														completed: false
 													} as Lesson
 												})
-												.filter(lesson => lesson.compositionId !== null)
+											// Don't filter by compositionId - show all lessons from Supabase
 											return reloadedLessons
 										}
 									}
@@ -770,12 +770,11 @@ class LocalLessonsService implements LessonsService {
 		// This ensures we don't accidentally filter out valid lessons from the database
 		// Filter only applies to localStorage fallback
 		if (lessons.length > 0) {
-			// Check if any lessons are from localStorage (they might be dummy)
-			const hasLocalDummy = lessons.some(l => !l.compositionId)
-			if (hasLocalDummy) {
-				// Only filter if we're using localStorage fallback
-				lessons = lessons.filter(lesson => lesson.compositionId !== null)
-			}
+			// Check if lessons are from Supabase by checking if they have valid IDs
+			// Supabase lessons should all be shown - don't filter by compositionId
+			// Only filter if we're certain they're from localStorage (which we can't easily determine here)
+			// For now, show all lessons - they're already validated if they're from Supabase
+			console.log(`[lessonsService] getLessonsWithProgress: Showing ${lessons.length} lessons (no filtering by compositionId)`)
 		}
 		
 		// Load progress (user-specific, requires auth, falls back to localStorage)
