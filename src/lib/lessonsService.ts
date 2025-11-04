@@ -562,7 +562,7 @@ class LocalLessonsService implements LessonsService {
 			})
 			
 			// Only save if titles changed (this will sync to Supabase via saveLessons)
-			const titlesChanged = sortedLessons.some((lesson, index) => {
+			const titlesChanged = sortedLessons.some((lesson) => {
 				const lessonNum = getLessonNumber(lesson.id)
 				return lesson.title !== `Lesson ${lessonNum}`
 			})
@@ -574,27 +574,10 @@ class LocalLessonsService implements LessonsService {
 			sortedLessons = updatedLessons
 		}
 		
-		// Update all lesson titles to match their position, then save
-		// Make sure to preserve ALL fields including description
-		const updatedLessons = sortedLessons.map((lesson, index) => ({
-			...lesson,
-			title: `Lesson ${index + 1}`, // Auto-generate title based on position
-			subtitle: lesson.subtitle || '',
-			topic: (lesson as any).topic || '',
-			description: lesson.description || '' // Preserve description
-		}))
-		
-		// Only save if titles changed (this will sync to Supabase via saveLessons)
-		const titlesChanged = sortedLessons.some((lesson, index) => lesson.title !== `Lesson ${index + 1}`)
-		if (titlesChanged) {
-			await this.saveLessons(updatedLessons)
-		}
-		
-		
 		return sortedLessons.map((lesson, index) => {
 			const completed = progress[lesson.id] === true
 			// Unlock if it's the first lesson, or if previous lesson is completed
-			const unlocked = index === 0 || (index > 0 && progress[updatedLessons[index - 1].id] === true)
+			const unlocked = index === 0 || (index > 0 && progress[sortedLessons[index - 1].id] === true)
 			
 			return {
 				...lesson,
