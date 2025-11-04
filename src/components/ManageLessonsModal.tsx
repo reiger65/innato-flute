@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { loadLessons, updateLesson, deleteLesson, reorderLessons, syncLocalLessonsToSupabase, type Lesson } from '../lib/lessonsService'
-import { getComposition } from '../lib/compositionService'
 import { getCurrentUser, isAdmin } from '../lib/authService'
 import { loadLessons as localLoadLessons } from '../lib/lessonsData'
 import { getSupabaseClient } from '../lib/supabaseClient'
@@ -503,28 +502,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		return match ? parseInt(match[1], 10) : 0
 	}
 
-	const [compositionNames, setCompositionNames] = useState<Map<string, string>>(new Map())
-
-	// Load composition names
-	useEffect(() => {
-		const loadNames = async () => {
-			const names = new Map<string, string>()
-			for (const lesson of lessons) {
-				if (lesson.compositionId && !names.has(lesson.compositionId)) {
-					const comp = await getComposition(lesson.compositionId)
-					names.set(lesson.compositionId, comp ? comp.name : 'Composition not found')
-				}
-			}
-			setCompositionNames(names)
-		}
-		loadNames()
-	}, [lessons])
-
-	const getCompositionName = (compositionId: string | null): string => {
-		if (!compositionId) return 'No composition'
-		return compositionNames.get(compositionId) || 'Loading...'
-	}
-
 	const getCategoryBadgeColor = (category: string) => {
 		switch (category) {
 			case 'beginner': return 'rgba(0, 128, 0, 0.2)'
@@ -782,12 +759,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 												}}>
 													{lesson.description}
 												</p>
-												<div style={{ 
-													fontSize: 'var(--font-size-xs)', 
-													color: 'rgba(0, 0, 0, 0.5)'
-												}}>
-													Composition: {getCompositionName(lesson.compositionId)}
-												</div>
 											</div>
 
 											{/* Action buttons */}
