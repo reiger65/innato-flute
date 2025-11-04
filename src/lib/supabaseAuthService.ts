@@ -158,29 +158,17 @@ export async function signUp(email: string, password: string, username?: string)
  * Sign in with Supabase or localStorage
  */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
-	console.log('🔍 signIn called, checking Supabase config...')
-	console.log('   - isSupabaseConfigured:', isSupabaseConfigured())
-	
 	if (isSupabaseConfigured()) {
 		const supabase = getSupabaseClient()
-		console.log('   - supabase client:', supabase ? 'found' : 'null')
 		
 		if (supabase) {
 			try {
-				console.log('   - Attempting Supabase signInWithPassword...')
 				const { data, error } = await supabase.auth.signInWithPassword({
 					email,
 					password
 				})
-				console.log('   - Supabase response received:', { hasData: !!data, hasError: !!error })
 				
 				if (error) {
-					console.error('Supabase signin error details:', {
-						message: error.message,
-						status: error.status,
-						name: error.name
-					})
-					
 					// More specific error messages
 					if (error.message.includes('Invalid login credentials') || error.message.includes('invalid')) {
 						return { success: false, error: 'Invalid email or password' }
@@ -199,15 +187,12 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 						createdAt: new Date(data.user.created_at).getTime()
 					}
 					setCachedUser(user)
-					console.log('✅ Login successful:', user.email)
 					return { success: true, user }
 				} else if (data.user && !data.session) {
 					// User exists but needs email confirmation
-					console.warn('⚠️ User exists but no session - email not confirmed?')
 					return { success: false, error: 'Please check your email to confirm your account. If you already confirmed, try resetting your password.' }
 				}
 				
-				console.error('❌ Login failed: No user or session returned')
 				return { success: false, error: 'Login failed. Please try again.' }
 			} catch (error) {
 				console.error('Supabase signin error:', error)
@@ -217,7 +202,6 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 	}
 	
 	// Fallback to localStorage
-	console.log('   - Using localStorage fallback (Supabase not configured)')
 	return await localSignIn(email, password)
 }
 

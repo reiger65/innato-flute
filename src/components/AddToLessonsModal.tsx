@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { addLesson } from '../lib/lessonsService'
 import { loadCategories, addCategory } from '../lib/categoriesService'
+import { getComposition } from '../lib/compositionService'
 
 interface AddToLessonsModalProps {
 	isOpen: boolean
@@ -95,6 +96,33 @@ export function AddToLessonsModal({ isOpen, compositionId, compositionName, onCl
 		
 		setCategorySuggestions(suggestions)
 	}, [isOpen])
+
+	// Load composition data when modal opens
+	useEffect(() => {
+		if (!isOpen || !compositionId) return
+
+		const loadCompositionData = async () => {
+			try {
+				const composition = await getComposition(compositionId)
+				if (composition) {
+					// Pre-fill form fields from composition metadata
+					// Use composition name as subtitle if subtitle is not set
+					setSubtitle((composition as any).subtitle || composition.name || '')
+					setDescription((composition as any).description || '')
+					setTopic((composition as any).topic || '')
+					// Map difficulty to category
+					const difficulty = (composition as any).difficulty || 'beginner'
+					setCategory(difficulty as 'beginner' | 'intermediate' | 'advanced')
+				}
+			} catch (error) {
+				console.error('Error loading composition data:', error)
+				// If loading fails, use composition name as subtitle
+				setSubtitle(compositionName)
+			}
+		}
+
+		loadCompositionData()
+	}, [isOpen, compositionId, compositionName])
 
 	// Handle Escape key to close modal
 	useEffect(() => {

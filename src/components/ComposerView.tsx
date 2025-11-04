@@ -67,6 +67,7 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 	const [savedProgressions, setSavedProgressions] = useState<SavedProgression[]>([])
 	// State for selected compositions for deletion
 	const [selectedCompositionIds, setSelectedCompositionIds] = useState<Set<string>>(new Set())
+	const [compositionSortOrder, setCompositionSortOrder] = useState<'newest' | 'oldest'>('newest') // Sort order: newest first or oldest first
 	const isPlayingRef = useRef(false)
 	const isPausedRef = useRef(false)
 	const isLoopingRef = useRef(false)
@@ -1735,13 +1736,13 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 						className="btn-sm tab" 
 						onClick={handleNewComposition}
 						disabled={isPlaying}
-						title="New Composition"
+						title="Clear Composition"
 					>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }}>
 							<line x1="12" y1="5" x2="12" y2="19"></line>
 							<line x1="5" y1="12" x2="19" y2="12"></line>
 						</svg>
-						New
+						Clear
 				</button>
 				<button 
 						className="btn-sm tab" 
@@ -1831,6 +1832,44 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 							{savedCompositions.length > 0 && (
 								<div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
 									<button
+										className="icon-btn-sm"
+										onClick={(e) => {
+											e.preventDefault()
+											e.stopPropagation()
+											setCompositionSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')
+										}}
+										title={compositionSortOrder === 'newest' ? 'Show oldest first' : 'Show newest first'}
+										style={{ 
+											padding: '6px',
+											background: 'transparent',
+											border: 'var(--border-2) solid var(--color-black)',
+											borderRadius: 'var(--radius-2)',
+											cursor: 'pointer',
+											display: 'flex',
+											alignItems: 'center',
+											justifyContent: 'center'
+										}}
+									>
+										<svg 
+											viewBox="0 0 24 24" 
+											fill="none" 
+											stroke="currentColor" 
+											strokeWidth="2" 
+											strokeLinecap="round" 
+											strokeLinejoin="round" 
+											width="16" 
+											height="16"
+										>
+											{compositionSortOrder === 'newest' ? (
+												// Arrow pointing down (newest first)
+												<polyline points="6 9 12 15 18 9"></polyline>
+											) : (
+												// Arrow pointing up (oldest first)
+												<polyline points="18 15 12 9 6 15"></polyline>
+											)}
+										</svg>
+									</button>
+									<button
 										className="btn-sm"
 										onClick={(e) => {
 											e.preventDefault()
@@ -1880,7 +1919,14 @@ export const ComposerView = forwardRef<ComposerViewRef, ComposerViewProps>(({ fl
 								</p>
 							) : (
 								<div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', maxHeight: '400px', overflowY: 'auto' }} key={openModalRefresh}>
-									{savedCompositions.map((composition) => (
+									{[...savedCompositions].sort((a, b) => {
+										// Sort by createdAt (most recent first or oldest first)
+										const aTime = a.createdAt || 0
+										const bTime = b.createdAt || 0
+										return compositionSortOrder === 'newest' 
+											? bTime - aTime // Newest first (descending)
+											: aTime - bTime // Oldest first (ascending)
+									}).map((composition) => (
 										<div 
 											key={composition.id} 
 											style={{ 

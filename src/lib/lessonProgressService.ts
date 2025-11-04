@@ -58,12 +58,43 @@ export async function loadLessonProgress(): Promise<Record<string, boolean>> {
 			}
 			
 			// Merge with local progress (for lessons not yet synced)
+			// But only sync progress for lessons that actually exist in Supabase
 			const localProgress = localLoadProgress()
+			const existingLessonIds = new Set<string>()
+			
+			// Get all existing lesson IDs from Supabase to filter out old progress
+			if (supabase) {
+				try {
+					const { data: existingLessons } = await supabase
+						.from('lessons')
+						.select('custom_id')
+					
+					if (existingLessons) {
+						existingLessons.forEach((lesson: any) => {
+							if (lesson.custom_id) {
+								existingLessonIds.add(lesson.custom_id)
+							}
+						})
+					}
+				} catch (err) {
+					// Ignore errors - just don't filter
+				}
+			}
+			
 			for (const [lessonId, completed] of Object.entries(localProgress)) {
+				// Only sync progress for lessons that exist
 				if (!progress[lessonId] && completed) {
-					progress[lessonId] = completed
-					// Try to sync this to Supabase
-					await saveLessonProgress(lessonId, completed)
+					// Check if lesson exists before trying to sync
+					if (existingLessonIds.size === 0 || existingLessonIds.has(lessonId)) {
+						progress[lessonId] = completed
+						// Try to sync this to Supabase (will silently fail if lesson doesn't exist)
+						await saveLessonProgress(lessonId, completed)
+					} else {
+						// Lesson doesn't exist - remove from local progress
+						// This cleans up old progress data for deleted lessons
+						const { saveLessonProgress: localSaveProgress } = await import('./lessonsData')
+						localSaveProgress(lessonId, false)
+					}
 				}
 			}
 			
@@ -103,12 +134,19 @@ export async function saveLessonProgress(lessonId: string, completed: boolean): 
 				.single()
 			
 			if (lessonError || !lessonData) {
+				// If lesson doesn't exist (error code PGRST116), silently skip Supabase save
+				// This happens when lessons have been deleted or renumbered
+				if (lessonError?.code === 'PGRST116') {
+					// Silently skip - lesson doesn't exist (might have been renumbered or deleted)
+					return
+				}
 				// If custom_id column doesn't exist (error code 42703 or PGRST204), silently skip Supabase save
 				// This happens when the migration hasn't been run yet
 				if ((lessonError?.code === '42703' || lessonError?.code === 'PGRST204') && 
 				    (lessonError.message?.includes('custom_id') || lessonError.message?.includes('Could not find'))) {
 					return
 				}
+				// Only log warnings for other errors
 				console.warn(`[lessonProgressService] Could not find lesson ${lessonId} in Supabase:`, lessonError)
 				return
 			}
@@ -127,6 +165,13 @@ export async function saveLessonProgress(lessonId: string, completed: boolean): 
 					})
 				
 				if (error) {
+					// Foreign key constraint violation (23503) means lesson doesn't exist - silently skip
+					if (error.code === '23503') {
+						// Lesson was deleted or doesn't exist - remove from local progress
+						const { saveLessonProgress: localSaveProgress } = await import('./lessonsData')
+						localSaveProgress(lessonId, false)
+						return
+					}
 					console.warn('[lessonProgressService] Supabase error saving progress:', error)
 				}
 			} else {
@@ -138,6 +183,10 @@ export async function saveLessonProgress(lessonId: string, completed: boolean): 
 					.eq('lesson_id', lessonData.id)
 				
 				if (error) {
+					// Foreign key constraint violation (23503) means lesson doesn't exist - silently skip
+					if (error.code === '23503') {
+						return
+					}
 					console.warn('[lessonProgressService] Supabase error deleting progress:', error)
 				}
 			}

@@ -496,7 +496,12 @@ export async function getComposition(id: string): Promise<SavedComposition | nul
 				fluteType: 'innato', // Default
 				tuning: '440', // Default
 				createdAt: new Date(data.created_at).getTime(),
-				updatedAt: new Date(data.updated_at).getTime()
+				updatedAt: new Date(data.updated_at).getTime(),
+				// Include metadata fields if they exist
+				subtitle: (data as any).subtitle || null,
+				description: (data as any).description || null,
+				topic: (data as any).topic || null,
+				difficulty: (data as any).difficulty || 'beginner'
 			}
 		} catch (error) {
 			console.error('[compositionService] Error getting from Supabase:', error)

@@ -66,7 +66,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				try {
 					const synced = await syncLocalLessonsToSupabase()
 					if (synced > 0) {
-						console.log(`[ManageLessonsModal] Synced ${synced} local lessons to Supabase`)
 						onShowToast?.(`Synced ${synced} local lesson(s) to Supabase`, 'success')
 						// Wait a bit for Supabase to update, then reload
 						await new Promise(resolve => setTimeout(resolve, 500))
@@ -78,14 +77,62 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			}
 			
 			const loadedLessons = await loadLessons()
-			console.log(`[ManageLessonsModal] Loaded ${loadedLessons.length} lessons:`, loadedLessons.map(l => ({ id: l.id, title: l.title, hasComposition: !!l.compositionId })))
+			
+			// Check for lessons that might be incorrectly marked as deleted
+			const deletedIdsKey = 'deleted-lesson-ids'
+			const deletedIds = JSON.parse(localStorage.getItem(deletedIdsKey) || '[]')
+			
+			if (deletedIds.length > 0) {
+				// Check if any "deleted" lessons actually exist in Supabase
+				const supabase = getSupabaseClient()
+				if (supabase) {
+					try {
+						const { data: supabaseLessons } = await supabase
+							.from('lessons')
+							.select('custom_id, lesson_number')
+						
+						if (supabaseLessons) {
+							const existingCustomIds = new Set(
+								supabaseLessons
+									.map(l => l.custom_id || `lesson-${l.lesson_number}`)
+									.filter(Boolean)
+							)
+							
+							// Remove any deleted IDs that actually exist in Supabase
+							const incorrectlyDeleted = deletedIds.filter(id => existingCustomIds.has(id))
+							if (incorrectlyDeleted.length > 0) {
+								console.warn(`[ManageLessonsModal] Found ${incorrectlyDeleted.length} lesson(s) incorrectly marked as deleted:`, incorrectlyDeleted)
+								const updatedDeletedIds = deletedIds.filter(id => !existingCustomIds.has(id))
+								localStorage.setItem(deletedIdsKey, JSON.stringify(updatedDeletedIds))
+								onShowToast?.(`Restored ${incorrectlyDeleted.length} lesson(s) that were incorrectly marked as deleted`, 'success')
+								// Reload lessons after fixing
+								const reloadedLessons = await loadLessons()
+								const uniqueLessons = reloadedLessons.filter((lesson, index, self) => 
+									index === self.findIndex(l => l.id === lesson.id)
+								)
+								const getLessonNumber = (id: string): number => {
+									const match = id.match(/lesson-(\d+)/)
+									return match ? parseInt(match[1], 10) : 0
+								}
+								const sortedLessons = [...uniqueLessons].sort((a, b) => {
+									return getLessonNumber(a.id) - getLessonNumber(b.id)
+								})
+								setLessons(sortedLessons)
+								return
+							}
+						}
+					} catch (error) {
+						console.error('Error checking deleted lessons:', error)
+					}
+				}
+			}
 			
 			// Deduplicate lessons by ID (keep first occurrence)
 			const uniqueLessons = loadedLessons.filter((lesson, index, self) => 
 				index === self.findIndex(l => l.id === lesson.id)
 			)
 			if (uniqueLessons.length !== loadedLessons.length) {
-				console.log(`[ManageLessonsModal] Removed ${loadedLessons.length - uniqueLessons.length} duplicate lesson(s)`)
+				// Duplicates removed silently
 			}
 			
 			// IMPORTANT: Don't filter out lessons by compositionId - show all lessons from Supabase
@@ -93,8 +140,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			// Only filter dummy lessons if they're explicitly from localStorage (which we can't distinguish here)
 			// For now, show all lessons - if a lesson doesn't have compositionId, it might be valid but just not assigned yet
 			const validLessons = uniqueLessons
-			
-			console.log(`[ManageLessonsModal] Showing ${validLessons.length} lessons (no filtering by compositionId)`)
 			
 			// Sort lessons by lesson number (lesson-1, lesson-2, etc.) so newest is last
 			const getLessonNumber = (id: string): number => {
@@ -133,27 +178,8 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		// Use custom topic if "Add new..." was selected, otherwise use selected topic
 		const finalTopic = showCustomTopicInput ? customTopic.trim() : editTopic.trim()
 
-		console.log('[ManageLessonsModal] handleSaveEdit called')
-		console.log('[ManageLessonsModal] Editing lesson:', editingLesson.id)
-		console.log('[ManageLessonsModal] Form values:', {
-			editTitle,
-			editSubtitle,
-			editDescription,
-			editTopic,
-			finalTopic,
-			editCategory
-		})
-
 		setLoading(true)
 		try {
-			console.log('[ManageLessonsModal] Saving lesson edit:', {
-				id: editingLesson.id,
-				subtitle: editSubtitle.trim(),
-				topic: finalTopic,
-				description: editDescription.trim(),
-				category: editCategory
-			})
-			
 			// Update all fields including title if it was changed
 			const result = await updateLesson(editingLesson.id, {
 				title: editTitle.trim() || editingLesson.title, // Use edited title or fallback to current
@@ -162,8 +188,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				description: editDescription.trim(),
 				category: editCategory
 			})
-			
-			console.log('[ManageLessonsModal] Update result:', result)
 			
 			// Persist new category if provided
 			if (finalTopic) {
@@ -174,7 +198,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			await new Promise(resolve => setTimeout(resolve, 1000)) // Increased delay to 1 second
 			
 			// Force reload lessons from Supabase
-			console.log('[ManageLessonsModal] Reloading lessons after update...')
 			await loadLessonsData()
 			
 			// Double-check: reload again after a short delay to ensure Supabase sync
@@ -285,156 +308,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		} catch (error) {
 			console.error('Error cleaning up dummy lessons:', error)
 			onShowToast?.('Failed to clean up dummy lessons. Please try again.', 'error')
-		} finally {
-			setLoading(false)
-		}
-	}
-
-	const handleFixAllLessonsData = async () => {
-		const currentUser = getCurrentUser()
-		if (!currentUser || !isAdmin(currentUser)) {
-			onShowToast?.('Only admins can fix lesson data.', 'error')
-			return
-		}
-
-		if (!window.confirm('This will update all lessons in Supabase with correct field mapping from localStorage. Continue?')) {
-			return
-		}
-
-		setLoading(true)
-		try {
-			const supabase = getSupabaseClient()
-			if (!supabase) {
-				onShowToast?.('Supabase not available.', 'error')
-				setLoading(false)
-				return
-			}
-
-			// Load lessons from localStorage (should have correct values)
-			const localLessons = localLoadLessons()
-			console.log(`[FixLessons] Found ${localLessons.length} lessons in localStorage`)
-			
-			// Log what's in localStorage for debugging
-			localLessons.forEach((lesson, idx) => {
-				console.log(`[FixLessons] Local lesson ${idx + 1} (${lesson.id}):`, {
-					title: lesson.title,
-					subtitle: lesson.subtitle || '(empty)',
-					description: lesson.description || '(empty)',
-					topic: (lesson as any).topic || '(empty)',
-					category: lesson.category || '(empty)'
-				})
-			})
-
-			if (localLessons.length === 0) {
-				onShowToast?.('No lessons found in localStorage to fix.', 'info')
-				setLoading(false)
-				return
-			}
-
-			// Get all lessons from Supabase with all fields to see what's wrong
-			const { data: supabaseLessons, error: fetchError } = await supabase
-				.from('lessons')
-				.select('custom_id, id, title, subtitle, description, topic, category, difficulty')
-
-			if (fetchError) {
-				console.error('Error fetching Supabase lessons:', fetchError)
-				onShowToast?.('Failed to fetch lessons from Supabase.', 'error')
-				setLoading(false)
-				return
-			}
-
-			console.log(`[FixLessons] Found ${supabaseLessons?.length || 0} lessons in Supabase`)
-			
-			// Log what's in Supabase for debugging
-			supabaseLessons?.forEach((lesson, idx) => {
-				console.log(`[FixLessons] Supabase lesson ${idx + 1} (${lesson.custom_id || lesson.id}):`, {
-					title: lesson.title || '(empty)',
-					subtitle: lesson.subtitle || '(empty)',
-					description: lesson.description || '(empty)',
-					topic: lesson.topic || '(empty)',
-					category: lesson.category || '(empty)',
-					difficulty: lesson.difficulty || '(empty)'
-				})
-			})
-
-			// Create a map of local lessons by ID
-			const localLessonsById = new Map(localLessons.map(l => [l.id, l]))
-
-			// Update each Supabase lesson with correct data from localStorage
-			let fixedCount = 0
-			let skippedCount = 0
-			let errorCount = 0
-
-			for (const supabaseLesson of (supabaseLessons || [])) {
-				const customId = supabaseLesson.custom_id || supabaseLesson.id
-				const localLesson = localLessonsById.get(customId)
-
-				if (!localLesson) {
-					console.log(`[FixLessons] Skipping lesson ${customId} - not found in localStorage`)
-					skippedCount++
-					continue
-				}
-
-				// Extract lesson number from custom_id
-				const match = customId.match(/lesson-(\d+)/)
-				const lessonNumber = match ? parseInt(match[1], 10) : 1
-
-				// Prepare update data with correct field mapping
-				const updateData = {
-					title: localLesson.title,
-					subtitle: localLesson.subtitle || null,
-					description: localLesson.description || null,
-					topic: (localLesson as any).topic || null, // Topic goes to topic field
-					category: null, // Don't use category field - use topic instead
-					difficulty: localLesson.category || 'beginner', // Category maps to difficulty
-					lesson_number: lessonNumber
-				}
-
-				console.log(`[FixLessons] Updating lesson ${customId}:`, {
-					from: {
-						subtitle: supabaseLesson.subtitle || '(empty)',
-						description: supabaseLesson.description || '(empty)',
-						topic: supabaseLesson.topic || '(empty)',
-						difficulty: supabaseLesson.difficulty || '(empty)'
-					},
-					to: {
-						subtitle: updateData.subtitle || '(empty)',
-						description: updateData.description || '(empty)',
-						topic: updateData.topic || '(empty)',
-						difficulty: updateData.difficulty
-					}
-				})
-
-				// Update in Supabase using custom_id
-				const { error: updateError, data: updateResult } = await supabase
-					.from('lessons')
-					.update(updateData)
-					.eq('custom_id', customId)
-
-				if (updateError) {
-					console.error(`[FixLessons] Error updating lesson ${customId}:`, updateError)
-					errorCount++
-				} else {
-					fixedCount++
-					console.log(`[FixLessons] ✅ Fixed lesson ${customId}`, updateResult)
-				}
-			}
-
-			// Wait a bit for Supabase to update
-			await new Promise(resolve => setTimeout(resolve, 500))
-
-			// Reload lessons
-			await loadLessonsData()
-			onSuccess()
-
-			if (errorCount > 0) {
-				onShowToast?.(`Fixed ${fixedCount} lesson(s). ${errorCount} failed. ${skippedCount > 0 ? `${skippedCount} skipped.` : ''} Check console for details.`, 'error')
-			} else {
-				onShowToast?.(`Fixed ${fixedCount} lesson(s). ${skippedCount > 0 ? `${skippedCount} skipped.` : ''}`, 'success')
-			}
-		} catch (error) {
-			console.error('Error fixing lessons data:', error)
-			onShowToast?.('Failed to fix lessons data. Please try again.', 'error')
 		} finally {
 			setLoading(false)
 		}
@@ -826,37 +699,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 
 				<div className="modal-footer">
 					<div style={{ display: 'flex', gap: 'var(--space-2)', marginRight: 'auto', flexWrap: 'wrap' }}>
-						{currentUser && isAdmin(currentUser) && lessons.length > 0 && (
-							<button 
-								className="btn-sm" 
-								onClick={handleDeleteAllLessons} 
-								disabled={loading}
-								style={{ 
-									background: 'transparent',
-									border: '2px solid #dc2626',
-									color: '#dc2626',
-									fontWeight: 'bold'
-								}}
-								title="Delete all lessons (you can re-add them from Composer)"
-							>
-								🗑️ Delete All Lessons ({lessons.length})
-							</button>
-						)}
-						{currentUser && isAdmin(currentUser) && (
-							<button 
-								className="btn-sm" 
-								onClick={handleFixAllLessonsData} 
-								disabled={loading}
-								style={{ 
-									background: 'transparent',
-									border: '2px solid #dc2626',
-									color: '#dc2626'
-								}}
-								title="Fix field mapping for all lessons (uses localStorage data)"
-							>
-								Fix All Lessons Data
-							</button>
-						)}
 						{lessons.filter(l => !l.compositionId).length > 0 && (
 							<button 
 								className="btn-sm" 

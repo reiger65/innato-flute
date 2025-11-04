@@ -47,15 +47,28 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 		loadComp()
 	}, [lesson.compositionId])
 
+	// Cleanup: stop audio when modal closes
+	useEffect(() => {
+		return () => {
+			// Stop all audio when component unmounts (modal closes)
+			simplePlayer.stopAll()
+			setIsPlaying(false)
+			setIsPaused(false)
+			isPlayingRef.current = false
+			isPausedRef.current = false
+			isLoopingRef.current = false
+		}
+	}, [])
+
 	if (!lesson.compositionId || !composition) {
 		return (
-			<div className="lesson-modal-overlay" onClick={onClose}>
+			<div className="lesson-modal-overlay" onClick={handleClose}>
 				<div className="lesson-modal" onClick={(e) => e.stopPropagation()}>
 					<div className="lesson-modal-header">
 						<div>
 							<h2 className="lesson-modal-title">{lesson.title}</h2>
 						</div>
-						<button className="icon-btn-sm" onClick={onClose} aria-label="Close">
+						<button className="icon-btn-sm" onClick={handleClose} aria-label="Close">
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 								<line x1="18" y1="6" x2="6" y2="18"></line>
 								<line x1="6" y1="6" x2="18" y2="18"></line>
@@ -137,13 +150,13 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 		// Clear loop state - user must re-enable if they want to loop next time
 		isLoopingRef.current = false
 		setIsLooping(false)
-		setIsPlaying(false)
+			setIsPlaying(false)
 		setIsPaused(false)
-		isPlayingRef.current = false
+			isPlayingRef.current = false
 		isPausedRef.current = false
 		setSelectedChordIndex(0)
-		setPlayingChordIndex(null)
-		setPlayingDotIndex(null)
+			setPlayingChordIndex(null)
+			setPlayingDotIndex(null)
 		pausedChordIndexRef.current = null
 		pausedDotIndexRef.current = null
 		setPausedChordIndex(null)
@@ -197,12 +210,12 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 			
 			// Ensure playing state is set
 			isPlayingRef.current = true
-			setIsPlaying(true)
+		setIsPlaying(true)
 		} else {
 			// Start fresh
 			startIndex = 0
 			startBeatIndex = 0
-			isPlayingRef.current = true
+		isPlayingRef.current = true
 			setIsPlaying(true)
 			isPausedRef.current = false
 			setIsPaused(false)
@@ -249,14 +262,14 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 					
 					// Calculate duration based on number of beats
 					// Add extra duration to the last chord (1 extra beat)
-					let chordDuration = beatDurationSeconds * chord.beats
+						let chordDuration = beatDurationSeconds * chord.beats
 					if (isLastChord) {
-						chordDuration += beatDurationSeconds // Add one extra beat for the last note
-					}
-					
+							chordDuration += beatDurationSeconds // Add one extra beat for the last note
+						}
+						
 					// Play the chord once with the correct duration (like ComposerView)
-					const notes = getNotesFromOpenStates(chord.openStates, fluteType)
-					simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration)
+						const notes = getNotesFromOpenStates(chord.openStates, fluteType)
+						simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration)
 				}
 				// For rests, just wait
 
@@ -269,10 +282,10 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 						break
 					}
 					
-					setPlayingDotIndex(beat)
+						setPlayingDotIndex(beat)
 					await new Promise(resolve => setTimeout(resolve, beatDurationMs))
 				}
-
+				
 				setPlayingDotIndex(null)
 				startBeatIndex = 0 // Reset after first chord
 				
@@ -320,7 +333,7 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 			isPlayingRef.current = false
 			isPausedRef.current = false
 			setPlayingChordIndex(null)
-		 	setPlayingDotIndex(null)
+			setPlayingDotIndex(null)
 			setPausedChordIndex(null)
 			setPausedDotIndex(null)
 		}
@@ -409,7 +422,7 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 	}
 
 	return (
-		<div className="lesson-modal-overlay" onClick={onClose}>
+		<div className="lesson-modal-overlay" onClick={handleClose}>
 			<div className="lesson-modal" onClick={(e) => e.stopPropagation()}>
 				{/* Header */}
 				<div className="lesson-modal-header">
@@ -431,7 +444,7 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 							{composition.tempo} BPM • {composition.timeSignature} • {chords.length} {chords.length === 1 ? 'chord' : 'chords'}
 						</div>
 					</div>
-					<button className="icon-btn-sm" onClick={onClose} aria-label="Close">
+					<button className="icon-btn-sm" onClick={handleClose} aria-label="Close">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 							<line x1="18" y1="6" x2="6" y2="18"></line>
 							<line x1="6" y1="6" x2="18" y2="18"></line>
@@ -590,13 +603,13 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 						>
 							{isPlaying && !isPaused ? (
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
-									<rect x="6" y="4" width="4" height="16"></rect>
-									<rect x="14" y="4" width="4" height="16"></rect>
-								</svg>
+										<rect x="6" y="4" width="4" height="16"></rect>
+										<rect x="14" y="4" width="4" height="16"></rect>
+									</svg>
 							) : (
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
-									<polygon points="5 3 19 12 5 21 5 3"></polygon>
-								</svg>
+										<polygon points="5 3 19 12 5 21 5 3"></polygon>
+									</svg>
 							)}
 						</button>
 						<button 

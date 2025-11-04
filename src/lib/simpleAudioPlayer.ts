@@ -55,7 +55,7 @@ class SimpleAudioPlayer {
 
 	/**
 	 * Initialize the Web Audio API context
-	 * Mobile-friendly: Ensures audio context is activated via user gesture
+	 * Mobile-friendly: Creates context lazily (doesn't resume until user interaction)
 	 */
 	async initAudio(): Promise<void> {
 		try {
@@ -74,30 +74,12 @@ class SimpleAudioPlayer {
 					sampleRate: undefined // Let browser choose optimal rate
 				});
 				this.isInitialized = true;
-			}
-			
-			// For mobile devices: Resume audio context if it's suspended
-			// This is required due to browser autoplay policies (especially iOS)
-			if (this.audioContext.state === 'suspended') {
-				try {
-					// Attempt to resume - this must be called in response to user gesture on iOS
-					await this.audioContext.resume();
-					
-					// Double-check after resume - sometimes iOS needs multiple attempts
-					if (this.audioContext.state === 'suspended') {
-						// Wait a bit and try again (iOS sometimes needs a small delay)
-						await new Promise(resolve => setTimeout(resolve, 100));
-						await this.audioContext.resume();
-					}
-				} catch (resumeError) {
-					console.warn("Audio context resume attempt failed (may need user interaction):", resumeError);
-					// Don't throw - let the play attempt happen anyway
-					// On iOS, audio will work after first user interaction
-				}
+				// Don't try to resume here - wait for user interaction
+				// Resuming will happen automatically when playChord is called
 			}
 			
 			// Create gain node if it doesn't exist
-			if (!this.gainNode) {
+			if (!this.gainNode && this.audioContext) {
 				this.gainNode = this.audioContext.createGain();
 				this.gainNode.connect(this.audioContext.destination);
 				this.gainNode.gain.value = 0.3; // Set volume to 30%
@@ -165,7 +147,7 @@ class SimpleAudioPlayer {
 			return;
 		}
 
-		// For mobile (especially iOS): Resume audio context if suspended
+		// Resume audio context if suspended (this happens after user interaction)
 		// This MUST be called directly from a user gesture event handler on iOS
 		if (this.audioContext.state === 'suspended') {
 			try {
@@ -177,27 +159,9 @@ class SimpleAudioPlayer {
 					// Try again immediately (iOS allows multiple resume calls)
 					await this.audioContext.resume();
 				}
-				
-				// If still suspended after resume attempts, log a warning
-				// On iOS, this usually means resume() wasn't called directly from user gesture
-				if (this.audioContext.state === 'suspended') {
-					console.warn("Audio context still suspended after resume attempts. This may require a direct user interaction on iOS.");
-				}
 			} catch (resumeError) {
-				console.warn("Could not resume audio context:", resumeError);
-				// Don't return - try to play anyway, sometimes it works
-			}
-		}
-		
-		// Additional iOS check: if state is still suspended, try one more time after a tiny delay
-		// Sometimes iOS needs a moment to process the resume
-		if (this.audioContext && this.audioContext.state === 'suspended') {
-			// Wait a tiny bit and try one more time
-			await new Promise(resolve => setTimeout(resolve, 10));
-			try {
-				await this.audioContext.resume();
-			} catch {
-				// Ignore - we'll try to play anyway
+				// Silently fail - audio will work after first user interaction
+				// Don't log warnings here as this is expected behavior
 			}
 		}
 

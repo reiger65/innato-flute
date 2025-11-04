@@ -20,20 +20,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 
 	// Check for existing session on mount
 	useEffect(() => {
-		// Check Supabase configuration
-		const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-		const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-		
-		console.log('🔍 LoginPanel mounted - Environment check:')
-		console.log('   VITE_SUPABASE_URL:', supabaseUrl || '❌ MISSING')
-		console.log('   VITE_SUPABASE_ANON_KEY:', supabaseKey ? '✅ SET' : '❌ MISSING')
-		
-		if (!supabaseUrl || !supabaseKey) {
-			console.error('⚠️ LoginPanel: Supabase not configured! Using localStorage only.')
-		}
-		
 		const user = getCurrentUser()
-		console.log('   Current user:', user ? `${user.email} (${user.id})` : 'none')
 		setCurrentUser(user)
 		onAuthChange(user)
 	}, [onAuthChange])
@@ -71,62 +58,31 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 
 	const handleSignIn = async (e: React.FormEvent) => {
 		e.preventDefault()
-		
-		// FORCE LOG - multiple methods to ensure visibility
-		console.log('🔐🔐🔐 LOGIN ATTEMPT STARTED 🔐🔐🔐')
-		console.error('LOGIN STARTED - CHECK THIS!')
-		console.warn('LOGIN FUNCTION CALLED')
-		alert('Login attempt started - check console for details') // Temporary - remove later
-		
-		console.log('   Email:', email)
-		console.log('   Has password:', !!password)
 		setError('')
 		setLoading(true)
 
 		if (!email || !password) {
-			console.warn('⚠️ Missing email or password')
 			setError('Please fill in all fields')
 			setLoading(false)
 			return
 		}
 
-		console.log('📤 Calling signIn function...')
-		console.error('CALLING SIGNIN FUNCTION')
-		
-		// Check environment before calling
-		const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-		const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-		console.error('ENV CHECK:', {
-			url: supabaseUrl || 'MISSING',
-			key: supabaseKey ? 'SET' : 'MISSING'
-		})
-		
 		try {
 			const result = await signIn(email, password)
-			console.error('SIGNIN RESULT:', result)
-			console.log('📥 SignIn result:', result)
 			setLoading(false)
 
 			if (result.success && result.user) {
-				console.error('✅ LOGIN SUCCESSFUL')
-				console.log('✅✅✅ LOGIN SUCCESSFUL ✅✅✅')
-				console.log('   User:', result.user)
 				setCurrentUser(result.user)
 				onAuthChange(result.user)
 				setEmail('')
 				setPassword('')
 			} else {
-				console.error('❌ LOGIN FAILED:', result.error)
-				console.error('❌❌❌ LOGIN FAILED ❌❌❌')
-				console.error('   Error:', result.error)
 				setError(result.error || 'Invalid email or password')
 			}
 		} catch (error) {
-			console.error('💥💥💥 EXCEPTION DURING LOGIN 💥💥💥')
-			console.error('   Error:', error)
-			console.error('EXCEPTION:', error)
+			console.error('Login error:', error)
 			setLoading(false)
-			setError('An error occurred during login. Please check the console.')
+			setError('An error occurred during login. Please try again.')
 		}
 	}
 

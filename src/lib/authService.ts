@@ -62,16 +62,10 @@ export function isAdmin(user: User | null | undefined): boolean {
  * Uses Supabase session when available, falls back to localStorage
  */
 export function getCurrentUser(): User | null {
-	const isSupabase = isSupabaseConfigured()
-	console.log('🔍 getCurrentUser called - isSupabaseConfigured:', isSupabase)
-	if (isSupabase) {
-		const user = supabaseGetCurrentUser()
-		console.log('   Supabase user:', user ? `${user.email} (${user.id})` : 'null')
-		return user
+	if (isSupabaseConfigured()) {
+		return supabaseGetCurrentUser()
 	}
-	const user = localGetCurrentUser() as User | null
-	console.log('   LocalStorage user:', user ? `${user.email} (${user.id})` : 'null')
-	return user
+	return localGetCurrentUser() as User | null
 }
 
 /**
@@ -97,13 +91,9 @@ export async function signUp(email: string, password: string, username?: string)
  * Uses Supabase when available, falls back to localStorage
  */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
-	const isSupabase = isSupabaseConfigured()
-	console.log('🔍 authService.signIn - isSupabaseConfigured:', isSupabase)
-	if (isSupabase) {
-		console.log('   → Using Supabase auth')
+	if (isSupabaseConfigured()) {
 		return await supabaseSignIn(email, password)
 	}
-	console.log('   → Using localStorage auth (fallback)')
 	return await localSignIn(email, password)
 }
 

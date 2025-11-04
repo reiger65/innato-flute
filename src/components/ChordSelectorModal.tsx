@@ -19,7 +19,7 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 	const [activeChordId, setActiveChordId] = useState<number | null>(null)
 	const [activeTab, setActiveTab] = useState<'finder' | 'favorites'>('finder')
 	const [searchQuery, setSearchQuery] = useState('')
-	const [selectedChordIds, setSelectedChordIds] = useState<number[]>([])
+	const [selectedChordCounts, setSelectedChordCounts] = useState<Record<number, number>>({}) // Track count per chord
 	const activeTimeoutRef = useRef<number | null>(null)
 
 	const handleChordClick = async (chordId: number) => {
@@ -64,24 +64,62 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 		}
 	}
 
+	const incrementChord = (chordId: number) => {
+		setSelectedChordCounts(prev => ({
+			...prev,
+			[chordId]: (prev[chordId] || 0) + 1
+		}))
+	}
+
+	const decrementChord = (chordId: number) => {
+		setSelectedChordCounts(prev => {
+			const current = prev[chordId] || 0
+			if (current <= 1) {
+				const updated = { ...prev }
+				delete updated[chordId]
+				return updated
+			}
+			return {
+				...prev,
+				[chordId]: current - 1
+			}
+		})
+	}
+
 	const toggleChordSelection = (chordId: number) => {
-		setSelectedChordIds(prev => {
-			if (prev.includes(chordId)) {
-				return prev.filter(id => id !== chordId)
+		setSelectedChordCounts(prev => {
+			if (prev[chordId] && prev[chordId] > 0) {
+				const updated = { ...prev }
+				delete updated[chordId]
+				return updated
 			} else {
-				return [...prev, chordId]
+				return {
+					...prev,
+					[chordId]: 1
+				}
 			}
 		})
 	}
 
 	const handleSaveToComposer = () => {
-		if (selectedChordIds.length === 0) {
+		// Convert counts to array of chord IDs (with duplicates)
+		const chordIds: number[] = []
+		Object.entries(selectedChordCounts).forEach(([chordId, count]) => {
+			for (let i = 0; i < count; i++) {
+				chordIds.push(Number(chordId))
+			}
+		})
+		
+		if (chordIds.length === 0) {
 			alert('Please select at least one chord')
 			return
 		}
-		onSelect(selectedChordIds)
+		onSelect(chordIds)
 		onClose()
 	}
+
+	// Calculate total selected count
+	const totalSelectedCount = Object.values(selectedChordCounts).reduce((sum, count) => sum + count, 0)
 
 	// Filter chords based on search query and active tab
 	const getFilteredChords = () => {
@@ -119,7 +157,7 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 
 				{/* Instructions */}
 				<div className="chord-selector-description">
-					<p>Click the circle icon on a chord to select it, then click "Save to composer" to add your selected chords. You can also click the heart icon to add chords to your favorites.</p>
+					<p>Click the + button on a chord to add it, then use +/− to adjust the count. Click "Save to composer" to add your selected chords. You can also click the heart icon to add chords to your favorites.</p>
 				</div>
 
 				{/* Tabs */}
@@ -167,10 +205,10 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 					<button
 						className="chord-selector-btn"
 						onClick={handleSaveToComposer}
-						disabled={selectedChordIds.length === 0}
+						disabled={totalSelectedCount === 0}
 						style={{ flexShrink: 0 }}
 					>
-						Save to composer {selectedChordIds.length > 0 && `(${selectedChordIds.length})`}
+						Save to composer {totalSelectedCount > 0 && `(${totalSelectedCount})`}
 					</button>
 				</div>
 
@@ -185,42 +223,116 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 						const fingering = getFingeringForChord(chordId)
 						const openStates = fingeringToOpenStates(fingering)
 						const isPlaying = playingChordId === chordId
-						const isSelected = selectedChordIds.includes(chordId)
+						const chordCount = selectedChordCounts[chordId] || 0
+						const isSelected = chordCount > 0
 						const isFavorite = favoriteChordIds.includes(chordId)
 
 						return (
 							<div key={chordId} className="chord-selector-item">
-								{/* Selection circle icon (top-left) */}
-								<button
-									style={{
+								{/* Plus/Minus controls (bottom-left) */}
+								{isSelected ? (
+									<div style={{
 										position: 'absolute',
-										top: '4px',
+										bottom: '4px',
 										left: '4px',
 										zIndex: 10,
-										width: '16px',
-										height: '16px',
-										background: isSelected ? 'var(--color-black)' : 'transparent',
-										border: isSelected ? 'none' : '2px solid var(--color-black)',
-										borderRadius: '50%',
 										display: 'flex',
 										alignItems: 'center',
-										justifyContent: 'center',
-										cursor: 'pointer',
-										padding: 0,
-										fontSize: '14px',
-										color: isSelected ? 'var(--color-white)' : 'transparent',
-										lineHeight: 1
-									}}
-									onClick={(e) => {
-										e.stopPropagation()
-										toggleChordSelection(chordId)
-									}}
-									aria-label={isSelected ? 'Deselect chord' : 'Select chord'}
-								>
-									{isSelected ? '✓' : '○'}
-								</button>
-
-								{/* Favorite heart icon (top-right) */}
+										gap: '4px',
+										background: 'var(--color-white)',
+										border: '1px solid var(--color-black)',
+										borderRadius: '4px',
+										padding: '2px'
+									}}>
+										<button
+											style={{
+												width: '16px',
+												height: '16px',
+												background: 'var(--color-black)',
+												border: 'none',
+												borderRadius: '2px',
+												display: 'flex',
+												alignItems: 'center',
+												justifyContent: 'center',
+												cursor: 'pointer',
+												padding: 0,
+												fontSize: '12px',
+												color: 'var(--color-white)',
+												lineHeight: 1
+											}}
+											onClick={(e) => {
+												e.stopPropagation()
+												decrementChord(chordId)
+											}}
+											aria-label="Decrease count"
+										>
+											−
+										</button>
+										<span style={{
+											fontSize: '12px',
+											fontWeight: 'bold',
+											minWidth: '12px',
+											textAlign: 'center',
+											color: 'var(--color-black)'
+										}}>
+											{chordCount}
+										</span>
+										<button
+											style={{
+												width: '16px',
+												height: '16px',
+												background: 'var(--color-black)',
+												border: 'none',
+												borderRadius: '2px',
+												display: 'flex',
+												alignItems: 'center',
+												justifyContent: 'center',
+												cursor: 'pointer',
+												padding: 0,
+												fontSize: '12px',
+												color: 'var(--color-white)',
+												lineHeight: 1
+											}}
+											onClick={(e) => {
+												e.stopPropagation()
+												incrementChord(chordId)
+											}}
+											aria-label="Increase count"
+										>
+											+
+										</button>
+									</div>
+								) : (
+									<button
+										style={{
+											position: 'absolute',
+											bottom: '4px',
+											left: '4px',
+											zIndex: 10,
+											width: '24px',
+											height: '24px',
+											background: 'var(--color-white)',
+											border: '1px solid var(--color-black)',
+											borderRadius: '4px',
+											display: 'flex',
+											alignItems: 'center',
+											justifyContent: 'center',
+											cursor: 'pointer',
+											padding: 0,
+											fontSize: '16px',
+											color: 'var(--color-black)',
+											lineHeight: 1,
+											fontWeight: 'bold'
+										}}
+										onClick={(e) => {
+											e.stopPropagation()
+											incrementChord(chordId)
+										}}
+										aria-label="Add chord"
+									>
+										+
+									</button>
+								)}
 								<button
 									style={{
 										position: 'absolute',

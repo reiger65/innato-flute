@@ -63,12 +63,7 @@ export async function syncLocalLessonsToSupabase(): Promise<number> {
 		// Filter out dummy lessons (those without compositionId) before syncing
 		const validLocalLessons = localLessons.filter(lesson => lesson.compositionId !== null)
 		if (validLocalLessons.length === 0) {
-			console.log('[lessonsService] No valid lessons to sync (all are dummy lessons without compositionId)')
 			return 0
-		}
-		
-		if (validLocalLessons.length !== localLessons.length) {
-			console.log(`[lessonsService] Filtered out ${localLessons.length - validLocalLessons.length} dummy lessons before syncing`)
 		}
 		
 		// Get existing Supabase lessons (by custom_id to avoid duplicates)
@@ -83,7 +78,6 @@ export async function syncLocalLessonsToSupabase(): Promise<number> {
 		}
 		
 		const existingCustomIds = new Set((existingData || []).map(l => l.custom_id).filter(Boolean))
-		console.log(`[lessonsService] Found ${existingCustomIds.size} existing lessons in Supabase, ${localLessons.length} local lessons to check`)
 		
 		// Upload local lessons that don't exist in Supabase
 		let syncedCount = 0
@@ -114,17 +108,12 @@ export async function syncLocalLessonsToSupabase(): Promise<number> {
 				
 				if (!error) {
 					syncedCount++
-					console.log(`[lessonsService] Synced lesson "${local.title}" (${local.id}) to Supabase`)
 				} else {
 					console.warn(`[lessonsService] Error syncing lesson ${local.id}:`, error)
 				}
 			} catch (err) {
 				console.warn(`[lessonsService] Failed to sync lesson ${local.id}:`, err)
 			}
-		}
-		
-		if (syncedCount > 0) {
-			console.log(`[lessonsService] Synced ${syncedCount} local lessons to Supabase`)
 		}
 		
 		return syncedCount
@@ -152,8 +141,6 @@ class LocalLessonsService implements LessonsService {
 				const deletedIdsKey = 'deleted-lesson-ids'
 				const deletedIds = new Set<string>(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
 				
-				console.log(`[lessonsService] Checking deleted lesson IDs:`, Array.from(deletedIds))
-				
 				const { data, error } = await supabase
 					.from('lessons')
 					.select('*')
@@ -164,18 +151,12 @@ class LocalLessonsService implements LessonsService {
 					return localLoadLessons()
 				}
 				
-				console.log(`[lessonsService] Loaded ${data?.length || 0} lessons from Supabase before filtering`)
-				
 				// Transform Supabase data to Lesson format
 				const supabaseLessons = (data || [])
 					.filter(item => {
 						// Filter out deleted lessons
 						const customId = item.custom_id || `lesson-${item.lesson_number}`
-						const isDeleted = deletedIds.has(customId)
-						if (isDeleted) {
-							console.log(`[lessonsService] Filtering out deleted lesson: ${customId} (${item.title || 'no title'})`)
-						}
-						return !isDeleted
+						return !deletedIds.has(customId)
 					})
 					.map(item => {
 						// Extract lesson number from custom_id or lesson_number
@@ -194,29 +175,17 @@ class LocalLessonsService implements LessonsService {
 							completed: false // Will be loaded from progress
 						}
 						
-						// Debug log for each lesson to verify fields
-						console.log(`[lessonsService] Loaded lesson "${lesson.title}" (${lesson.id}):`, {
-							subtitle: item.subtitle || '(empty)',
-							description: item.description || '(empty)',
-							topic: item.topic || '(empty)',
-							category: item.category || '(empty)',
-							difficulty: item.difficulty || '(empty)',
-							compositionId: lesson.compositionId
-						})
-						
 						return lesson
 					})
 				
 				// Don't filter out lessons - show all lessons from Supabase
 				// Only filter dummy lessons when they're created locally, not when loading from Supabase
-				console.log(`[lessonsService] Loaded ${supabaseLessons.length} lessons from Supabase`)
 				
 				// Only clean up localStorage dummy lessons if Supabase has valid lessons
 				if (supabaseLessons.length > 0) {
 					const localLessonsCheck = localLoadLessons()
 					const localDummyCount = localLessonsCheck.filter(l => !l.compositionId).length
 					if (localDummyCount > 0) {
-						console.log(`[lessonsService] Found ${localDummyCount} dummy lessons in localStorage, cleaning up...`)
 						const validLocalLessons = localLessonsCheck.filter(l => l.compositionId !== null)
 						localSaveLessons(validLocalLessons)
 					}
@@ -239,7 +208,6 @@ class LocalLessonsService implements LessonsService {
 								try {
 									const synced = await syncLocalLessonsToSupabase()
 									if (synced > 0) {
-										console.log(`[lessonsService] Auto-synced ${synced} local lessons to Supabase`)
 										// Reload from Supabase after sync
 										const { data: reloadData } = await supabase
 											.from('lessons')
@@ -288,7 +256,6 @@ class LocalLessonsService implements LessonsService {
 				
 				// If we have Supabase lessons, use them (they're global)
 				if (supabaseLessons.length > 0) {
-					console.log(`[lessonsService] Loaded ${supabaseLessons.length} lessons from Supabase`)
 					return supabaseLessons
 				}
 				
@@ -296,7 +263,6 @@ class LocalLessonsService implements LessonsService {
 				const localLessonsFallback = localLoadLessons()
 				// Only filter dummy lessons from localStorage fallback, not from Supabase
 				const validLocalLessonsFallback = localLessonsFallback.filter(l => l.compositionId !== null)
-				console.log(`[lessonsService] Supabase empty, loaded ${validLocalLessonsFallback.length} lessons from localStorage`)
 				return validLocalLessonsFallback
 			} catch (error) {
 				console.error('[lessonsService] Error loading from Supabase:', error)
@@ -398,42 +364,48 @@ class LocalLessonsService implements LessonsService {
 	}
 
 	async updateLesson(lessonId: string, updates: Partial<Lesson>): Promise<boolean> {
-		console.log(`[lessonsService] updateLesson called for ${lessonId}:`, updates)
-		
 		// Only admins can update lessons (lessons are global)
 		// Update local first
 		const localResult = localUpdateLesson(lessonId, updates)
-		console.log(`[lessonsService] Local update result:`, localResult)
 		
 		if (isSupabaseConfigured()) {
-			console.log('[lessonsService] Supabase is configured, attempting Supabase update...')
 			try {
 				const supabase = getSupabaseClient()
 				if (!supabase) {
-					console.warn('[lessonsService] No Supabase client, returning local result')
 					return localResult
 				}
 
-				const user = getCurrentUser()
-				if (!user) {
-					console.warn('[lessonsService] No user, returning local result')
-					return localResult
-				}
-
+				// Check session directly from Supabase first
 				const { data: { session } } = await supabase.auth.getSession()
 				if (!session?.user?.id) {
-					console.warn('[lessonsService] No session, returning local result')
 					return localResult
 				}
 
-				// Admin check - only admins can update global lessons
-				const { isAdmin } = await import('./authService')
-				if (!isAdmin(user)) {
-					console.warn('[lessonsService] Non-admin user attempted to update lesson')
-					return localResult
+				// Get user info for admin check
+				const user = getCurrentUser()
+				if (!user) {
+					// Session exists but getCurrentUser() failed - try to construct user from session
+					const sessionUser = session.user
+					const fallbackUser = {
+						id: sessionUser.id,
+						email: sessionUser.email || '',
+						username: sessionUser.user_metadata?.username,
+						role: sessionUser.user_metadata?.role,
+						createdAt: new Date(sessionUser.created_at).getTime()
+					}
+					
+					// Admin check - only admins can update global lessons
+					const { isAdmin } = await import('./authService')
+					if (!isAdmin(fallbackUser as any)) {
+						return localResult
+					}
+				} else {
+					// Admin check - only admins can update global lessons
+					const { isAdmin } = await import('./authService')
+					if (!isAdmin(user)) {
+						return localResult
+					}
 				}
-				
-				console.log('[lessonsService] Admin check passed, proceeding with Supabase update...')
 				
 				// Update in Supabase using custom_id (lessons are global, no user filter needed)
 				const updateData: any = {}
@@ -451,6 +423,7 @@ class LocalLessonsService implements LessonsService {
 				}
 				if (updates.category !== undefined) updateData.difficulty = updates.category // category maps to difficulty
 				if (updates.compositionId !== undefined) updateData.composition_id = updates.compositionId
+				
 				
 				// Only update lesson_number if title actually changed (indicating a position change)
 				// Don't update lesson_number if we're just updating other fields like subtitle/description
@@ -481,7 +454,6 @@ class LocalLessonsService implements LessonsService {
 					}
 				} catch (queryError) {
 					// Ignore query errors - we'll just skip lesson_number update
-					console.warn('[lessonsService] Could not fetch current lesson for comparison:', queryError)
 				}
 				
 				if (currentLesson && updates.title && updates.title !== currentLesson.title) {
@@ -496,11 +468,8 @@ class LocalLessonsService implements LessonsService {
 					}
 				}
 				
-				console.log(`[lessonsService] Updating lesson ${lessonId} with:`, updateData)
-				
 				// Only proceed with update if we have fields to update
 				if (Object.keys(updateData).length === 0) {
-					console.warn('[lessonsService] No fields to update for lesson', lessonId)
 					return localResult
 				}
 				
@@ -533,7 +502,6 @@ class LocalLessonsService implements LessonsService {
 							existingLesson = byLessonNumber
 							// If custom_id was null, update it now
 							if (!existingLesson.custom_id) {
-								console.log(`[lessonsService] Setting custom_id for lesson ${lessonNumber} to ${lessonId}`)
 								await supabase
 									.from('lessons')
 									.update({ custom_id: lessonId })
@@ -548,19 +516,9 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				if (checkError || !existingLesson) {
-					console.error(`[lessonsService] Lesson ${lessonId} not found in Supabase:`, checkError)
-					console.warn('[lessonsService] Falling back to localStorage only')
+					console.warn(`[lessonsService] Lesson ${lessonId} not found in Supabase, using localStorage only`)
 					return localResult
 				}
-				
-				console.log(`[lessonsService] Found lesson in Supabase:`, {
-					id: existingLesson.id,
-					custom_id: existingLesson.custom_id,
-					lesson_number: existingLesson.lesson_number,
-					current_subtitle: existingLesson.subtitle,
-					current_description: existingLesson.description,
-					current_topic: existingLesson.topic
-				})
 				
 				// Update using the Supabase id (most reliable)
 				const { error, data } = await supabase
@@ -571,25 +529,10 @@ class LocalLessonsService implements LessonsService {
 				
 				if (error) {
 					console.error('[lessonsService] Supabase error updating lesson:', error)
-					console.warn('[lessonsService] Using local result only')
-				} else {
-					console.log(`[lessonsService] Successfully updated lesson ${lessonId}. Rows updated: ${data?.length || 0}`)
-					if (data && data.length > 0) {
-						console.log(`[lessonsService] Updated lesson data:`, {
-							subtitle: data[0].subtitle,
-							description: data[0].description,
-							topic: data[0].topic
-						})
-					} else {
-						console.warn(`[lessonsService] Update succeeded but no data returned for lesson ${lessonId}`)
-					}
 				}
 			} catch (error) {
 				console.error('[lessonsService] Error updating lesson in Supabase:', error)
-				console.error('[lessonsService] Error details:', JSON.stringify(error, null, 2))
 			}
-		} else {
-			console.log('[lessonsService] Supabase not configured, using localStorage only')
 		}
 		
 		return localResult
@@ -676,17 +619,36 @@ class LocalLessonsService implements LessonsService {
 				const supabase = getSupabaseClient()
 				if (!supabase) return newLesson
 				
-				const user = getCurrentUser()
-				if (!user) return newLesson
-				
+				// Check session directly from Supabase first
 				const { data: { session } } = await supabase.auth.getSession()
-				if (!session?.user?.id) return newLesson
-				
-				// Admin check - only admins can add global lessons
-				const { isAdmin } = await import('./authService')
-				if (!isAdmin(user)) {
-					console.warn('[lessonsService] Non-admin user attempted to add lesson')
+				if (!session?.user?.id) {
 					return newLesson
+				}
+
+				// Get user info for admin check
+				const user = getCurrentUser()
+				if (!user) {
+					// Session exists but getCurrentUser() failed - try to construct user from session
+					const sessionUser = session.user
+					const fallbackUser = {
+						id: sessionUser.id,
+						email: sessionUser.email || '',
+						username: sessionUser.user_metadata?.username,
+						role: sessionUser.user_metadata?.role,
+						createdAt: new Date(sessionUser.created_at).getTime()
+					}
+					
+					// Admin check - only admins can add global lessons
+					const { isAdmin } = await import('./authService')
+					if (!isAdmin(fallbackUser as any)) {
+						return newLesson
+					}
+				} else {
+					// Admin check - only admins can add global lessons
+					const { isAdmin } = await import('./authService')
+					if (!isAdmin(user)) {
+						return newLesson
+					}
 				}
 				
 				// Extract lesson number from id like "lesson-1" -> 1
@@ -734,32 +696,95 @@ class LocalLessonsService implements LessonsService {
 				const supabase = getSupabaseClient()
 				if (!supabase) return localResult
 				
-				const user = getCurrentUser()
-				if (!user) return localResult
-				
+				// Check session directly from Supabase first
 				const { data: { session } } = await supabase.auth.getSession()
 				if (!session?.user?.id) return localResult
-				
-				// Admin check - only admins can delete global lessons
-				const { isAdmin } = await import('./authService')
-				if (!isAdmin(user)) {
-					console.warn('[lessonsService] Non-admin user attempted to delete lesson')
-					return localResult
+
+				// Get user info for admin check
+				const user = getCurrentUser()
+				if (!user) {
+					// Session exists but getCurrentUser() failed - try to construct user from session
+					const sessionUser = session.user
+					const fallbackUser = {
+						id: sessionUser.id,
+						email: sessionUser.email || '',
+						username: sessionUser.user_metadata?.username,
+						role: sessionUser.user_metadata?.role,
+						createdAt: new Date(sessionUser.created_at).getTime()
+					}
+					
+					// Admin check - only admins can delete global lessons
+					const { isAdmin } = await import('./authService')
+					if (!isAdmin(fallbackUser as any)) {
+						return localResult
+					}
+				} else {
+					// Admin check - only admins can delete global lessons
+					const { isAdmin } = await import('./authService')
+					if (!isAdmin(user)) {
+						return localResult
+					}
 				}
 				
 				// Delete from Supabase using custom_id (lessons are global, no user filter)
-				const { error, data } = await supabase
+				const { error: deleteError, data: deletedData } = await supabase
 					.from('lessons')
 					.delete()
 					.eq('custom_id', lessonId)
 					.select()
 				
-				if (error) {
-					console.warn('[lessonsService] Supabase error deleting lesson, using local result:', error)
+				if (deleteError) {
+					console.warn('[lessonsService] Supabase error deleting lesson, using local result:', deleteError)
 					// Even if Supabase deletion fails, we've tracked it in localStorage, so it won't show up
-				} else {
-					console.log(`[lessonsService] Deleted lesson ${lessonId} from Supabase. Rows deleted: ${data?.length || 0}`)
-					// If Supabase deletion succeeded, we can keep the ID in the deleted list as a safety measure
+					return localResult
+				}
+				
+				// After deletion, renumber remaining lessons sequentially
+				// Load all remaining lessons
+				const { data: remainingLessons, error: loadError } = await supabase
+					.from('lessons')
+					.select('*')
+					.order('lesson_number', { ascending: true })
+				
+				if (loadError || !remainingLessons) {
+					console.warn('[lessonsService] Error loading remaining lessons for renumbering:', loadError)
+					return localResult
+				}
+				
+				// Renumber all remaining lessons sequentially
+				const updates = remainingLessons.map((lesson, index) => {
+					const newLessonNumber = index + 1
+					const newCustomId = `lesson-${newLessonNumber}`
+					
+					// Only update if lesson number or custom_id changed
+					if (lesson.lesson_number !== newLessonNumber || lesson.custom_id !== newCustomId) {
+						return {
+							id: lesson.id,
+							lesson_number: newLessonNumber,
+							custom_id: newCustomId,
+							title: `Lesson ${newLessonNumber}`
+						}
+					}
+					return null
+				}).filter(Boolean)
+				
+				// Update all lessons that need renumbering
+				if (updates.length > 0) {
+					for (const update of updates) {
+						if (!update) continue
+						const { error: updateError } = await supabase
+							.from('lessons')
+							.update({
+								lesson_number: update.lesson_number,
+								custom_id: update.custom_id,
+								title: update.title
+							})
+							.eq('id', update.id)
+						
+						if (updateError) {
+							console.warn(`[lessonsService] Error renumbering lesson ${update.id}:`, updateError)
+						}
+					}
 				}
 			} catch (error) {
 				console.error('[lessonsService] Error deleting lesson from Supabase:', error)
@@ -782,7 +807,6 @@ class LocalLessonsService implements LessonsService {
 			// Supabase lessons should all be shown - don't filter by compositionId
 			// Only filter if we're certain they're from localStorage (which we can't easily determine here)
 			// For now, show all lessons - they're already validated if they're from Supabase
-			console.log(`[lessonsService] getLessonsWithProgress: Showing ${lessons.length} lessons (no filtering by compositionId)`)
 		}
 		
 		// Load progress (user-specific, requires auth, falls back to localStorage)
@@ -805,29 +829,22 @@ class LocalLessonsService implements LessonsService {
 			
 			// Update titles based on custom_id number, not array position
 			// This ensures titles match the actual lesson number from custom_id
+			// But DON'T save - titles are display-only and auto-generated
+			// Saving here would delete all lessons and reinsert them, causing data loss
 			const updatedLessons = sortedLessons.map((lesson) => {
 				const lessonNum = getLessonNumber(lesson.id)
 				const expectedTitle = `Lesson ${lessonNum}`
 				
 				return {
 					...lesson,
-					title: expectedTitle, // Use custom_id number, not array index
+					title: expectedTitle, // Use custom_id number, not array index (display only)
 					subtitle: lesson.subtitle || '',
 					topic: (lesson as any).topic || '',
 					description: lesson.description || '' // Preserve description
 				}
 			})
 			
-			// Only save if titles changed (this will sync to Supabase via saveLessons)
-			const titlesChanged = sortedLessons.some((lesson) => {
-				const lessonNum = getLessonNumber(lesson.id)
-				return lesson.title !== `Lesson ${lessonNum}`
-			})
-			if (titlesChanged) {
-				await this.saveLessons(updatedLessons)
-			}
-			
-			// Use updated lessons for progress calculation
+			// Use updated lessons for progress calculation (but don't save - titles are auto-generated)
 			sortedLessons = updatedLessons
 		}
 		
@@ -860,7 +877,9 @@ class LocalLessonsService implements LessonsService {
 				id: `lesson-${index + 1}`,
 				title: `Lesson ${index + 1}`, // Auto-generate title based on position
 				subtitle: lesson.subtitle || '', // Preserve subtitle
-				topic: (lesson as any).topic || '' // Preserve topic
+				topic: (lesson as any).topic || '', // Preserve topic
+				description: lesson.description || '', // Preserve description
+				category: lesson.category // Preserve category/difficulty
 			}))
 			
 			await this.saveLessons(renumberedLessons)
