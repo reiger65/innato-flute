@@ -86,21 +86,6 @@ export function ChordSelectorModal({ fluteType, tuning, onSelect, onClose, favor
 		})
 	}
 
-	const toggleChordSelection = (chordId: number) => {
-		setSelectedChordCounts(prev => {
-			if (prev[chordId] && prev[chordId] > 0) {
-				const updated = { ...prev }
-				delete updated[chordId]
-				return updated
-			} else {
-				return {
-					...prev,
-					[chordId]: 1
-				}
-			}
-		})
-	}
-
 	const handleSaveToComposer = () => {
 		// Convert counts to array of chord IDs (with duplicates)
 		const chordIds: number[] = []

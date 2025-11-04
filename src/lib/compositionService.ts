@@ -497,12 +497,12 @@ export async function getComposition(id: string): Promise<SavedComposition | nul
 				tuning: '440', // Default
 				createdAt: new Date(data.created_at).getTime(),
 				updatedAt: new Date(data.updated_at).getTime(),
-				// Include metadata fields if they exist
-				subtitle: (data as any).subtitle || null,
-				description: (data as any).description || null,
-				topic: (data as any).topic || null,
-				difficulty: (data as any).difficulty || 'beginner'
-			}
+				// Include metadata fields if they exist (cast to any to allow additional fields)
+				...(data as any).subtitle && { subtitle: (data as any).subtitle },
+				...(data as any).description && { description: (data as any).description },
+				...(data as any).topic && { topic: (data as any).topic },
+				...(data as any).difficulty && { difficulty: (data as any).difficulty }
+			} as SavedComposition & { subtitle?: string; description?: string; topic?: string; difficulty?: string }
 		} catch (error) {
 			console.error('[compositionService] Error getting from Supabase:', error)
 			return getLocal(id)

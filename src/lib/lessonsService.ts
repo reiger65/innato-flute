@@ -525,7 +525,7 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				// Update using the Supabase id (most reliable)
-				const { error, data } = await supabase
+				const { error } = await supabase
 					.from('lessons')
 					.update(updateData)
 					.eq('id', existingLesson.id) // Use Supabase id instead of custom_id for reliability
@@ -765,11 +765,10 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				// Delete from Supabase using custom_id (lessons are global, no user filter)
-				const { error: deleteError, data: deletedData } = await supabase
+				const { error: deleteError } = await supabase
 					.from('lessons')
 					.delete()
 					.eq('custom_id', lessonId)
-					.select()
 				
 				if (deleteError) {
 					console.warn('[lessonsService] Supabase error deleting lesson, using local result:', deleteError)

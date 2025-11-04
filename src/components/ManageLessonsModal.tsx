@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { loadLessons, updateLesson, deleteLesson, reorderLessons, syncLocalLessonsToSupabase, type Lesson } from '../lib/lessonsService'
 import { getCurrentUser, isAdmin } from '../lib/authService'
-import { loadLessons as localLoadLessons } from '../lib/lessonsData'
 import { getSupabaseClient } from '../lib/supabaseClient'
 import { loadCategories, addCategory } from '../lib/categoriesService'
 
@@ -99,10 +98,10 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 							)
 							
 							// Remove any deleted IDs that actually exist in Supabase
-							const incorrectlyDeleted = deletedIds.filter(id => existingCustomIds.has(id))
+							const incorrectlyDeleted = deletedIds.filter((id: string) => existingCustomIds.has(id))
 							if (incorrectlyDeleted.length > 0) {
 								console.warn(`[ManageLessonsModal] Found ${incorrectlyDeleted.length} lesson(s) incorrectly marked as deleted:`, incorrectlyDeleted)
-								const updatedDeletedIds = deletedIds.filter(id => !existingCustomIds.has(id))
+								const updatedDeletedIds = deletedIds.filter((id: string) => !existingCustomIds.has(id))
 								localStorage.setItem(deletedIdsKey, JSON.stringify(updatedDeletedIds))
 								onShowToast?.(`Restored ${incorrectlyDeleted.length} lesson(s) that were incorrectly marked as deleted`, 'success')
 								// Reload lessons after fixing
@@ -181,7 +180,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		setLoading(true)
 		try {
 			// Update all fields including title if it was changed
-			const result = await updateLesson(editingLesson.id, {
+			await updateLesson(editingLesson.id, {
 				title: editTitle.trim() || editingLesson.title, // Use edited title or fallback to current
 				subtitle: editSubtitle.trim(),
 				topic: finalTopic,
@@ -252,32 +251,6 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		} catch (error) {
 			console.error('Error deleting lesson:', error)
 			onShowToast?.('Failed to delete lesson. Please try again.', 'error')
-		} finally {
-			setLoading(false)
-		}
-	}
-
-	const handleDeleteAllLessons = async () => {
-		if (!window.confirm(`⚠️ WARNING: Delete ALL ${lessons.length} lesson(s)? This action cannot be undone!\n\nAfter deletion, you can re-add lessons from the Composer with correct fields.`)) {
-			return
-		}
-
-		setLoading(true)
-		try {
-			// Delete all lessons one by one
-			for (const lesson of lessons) {
-				await deleteLesson(lesson.id)
-			}
-			
-			// Clear the deleted IDs list since all lessons are gone
-			localStorage.removeItem('deleted-lesson-ids')
-			
-			await loadLessonsData()
-			onSuccess()
-			onShowToast?.(`Deleted all ${lessons.length} lesson(s). You can now re-add them from the Composer.`, 'success')
-		} catch (error) {
-			console.error('Error deleting all lessons:', error)
-			onShowToast?.('Failed to delete all lessons. Please try again.', 'error')
 		} finally {
 			setLoading(false)
 		}

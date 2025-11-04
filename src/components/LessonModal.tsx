@@ -47,6 +47,17 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 		loadComp()
 	}, [lesson.compositionId])
 
+	// Handle close - stop audio and reset states
+	const handleClose = () => {
+		simplePlayer.stopAll()
+		setIsPlaying(false)
+		setIsPaused(false)
+		isPlayingRef.current = false
+		isPausedRef.current = false
+		isLoopingRef.current = false
+		onClose()
+	}
+
 	// Cleanup: stop audio when modal closes
 	useEffect(() => {
 		return () => {
