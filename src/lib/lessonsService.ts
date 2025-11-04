@@ -415,12 +415,16 @@ class LocalLessonsService implements LessonsService {
 				// Update in Supabase using custom_id (lessons are global, no user filter needed)
 				const updateData: any = {}
 				if (updates.title !== undefined) updateData.title = updates.title
-				if (updates.subtitle !== undefined) updateData.subtitle = updates.subtitle
+				if (updates.subtitle !== undefined) {
+					updateData.subtitle = updates.subtitle || null // Allow empty strings, convert to null for Supabase
+				}
 				if ((updates as any).topic !== undefined) {
-					updateData.topic = (updates as any).topic
+					updateData.topic = (updates as any).topic || null
 					updateData.category = null // Don't use category field - use topic instead
 				}
-				if (updates.description !== undefined) updateData.description = updates.description
+				if (updates.description !== undefined) {
+					updateData.description = updates.description || null
+				}
 				if (updates.category !== undefined) updateData.difficulty = updates.category // category maps to difficulty
 				if (updates.compositionId !== undefined) updateData.composition_id = updates.compositionId
 				
@@ -432,13 +436,25 @@ class LocalLessonsService implements LessonsService {
 					}
 				}
 				
-				const { error } = await supabase
+				console.log(`[lessonsService] Updating lesson ${lessonId} with:`, updateData)
+				
+				const { error, data } = await supabase
 					.from('lessons')
 					.update(updateData)
 					.eq('custom_id', lessonId) // Lessons are global, no user filter
+					.select()
 				
 				if (error) {
 					console.warn('[lessonsService] Supabase error updating lesson, using local result:', error)
+				} else {
+					console.log(`[lessonsService] Successfully updated lesson ${lessonId}. Rows updated: ${data?.length || 0}`)
+					if (data && data.length > 0) {
+						console.log(`[lessonsService] Updated lesson data:`, {
+							subtitle: data[0].subtitle,
+							description: data[0].description,
+							topic: data[0].topic
+						})
+					}
 				}
 			} catch (error) {
 				console.error('[lessonsService] Error updating lesson in Supabase:', error)
