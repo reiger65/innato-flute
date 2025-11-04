@@ -7,7 +7,6 @@ import {
 	isSharedItemFavorited,
 	addSharedFavorite,
 	removeSharedFavorite,
-	getLastRestApiError,
 	deleteSharedItem
 } from '../lib/sharedItemsStorage'
 import { saveProgression } from '../lib/progressionService'
@@ -47,21 +46,10 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				const ranked = await getRankedSharedItems()
 				setSharedItems(ranked)
 				
-				const total = ranked.progressions.length + ranked.compositions.length
-				
-				// Check for REST API errors
-				const restApiError = getLastRestApiError()
-				
-				// Only show error if NO items were loaded at all
-				if (total === 0) {
-					let errorMsg = 'No shared items found. Make sure compositions are shared and marked as public in Supabase.'
-					if (restApiError) {
-						errorMsg = `REST API Error: ${restApiError}`
-					}
-					setLoadingError(errorMsg)
-				} else {
-					setLoadingError(null)
-				}
+				// Don't show technical REST API errors - just show friendly empty state message
+				// The REST API error about "returned 0 compositions" is not an actual error,
+				// it's just informational logging when there are no shared items yet
+				setLoadingError(null) // Clear any technical errors when there are no items
 			} catch (error) {
 				console.error('Error loading shared items:', error)
 				setLoadingError(`Error loading shared items: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -329,45 +317,48 @@ export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProg
 				</div>
 			)}
 			
-			{loadingError && !isLoading && (
-				<div style={{ 
-					textAlign: 'center', 
-					padding: 'var(--space-4)', 
-					color: 'rgba(0, 0, 0, 0.8)',
-					background: 'rgba(255, 200, 0, 0.1)',
-					border: '2px solid rgba(255, 200, 0, 0.5)',
-					borderRadius: 'var(--radius-2)',
-					marginBottom: 'var(--space-4)'
-				}}>
-					<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
-						⚠️ {loadingError}
-					</p>
-					<button 
-						className="btn-sm"
-						onClick={async () => {
-							setIsLoading(true)
-							setLoadingError(null)
-							try {
-								const ranked = await getRankedSharedItems()
-								setSharedItems(ranked)
-								const total = ranked.progressions.length + ranked.compositions.length
-								if (total === 0) {
-									setLoadingError('No shared items found. Make sure compositions are shared and marked as public in Supabase.')
-								} else {
+			{/* Loading Error - Only show for admins */}
+			{loadingError && !isLoading && (() => {
+				const currentUser = getCurrentUser()
+				if (!currentUser || !isAdmin(currentUser)) {
+					return null // Hide error message for non-admins
+				}
+				return (
+					<div style={{ 
+						textAlign: 'center', 
+						padding: 'var(--space-4)', 
+						color: 'rgba(0, 0, 0, 0.8)',
+						background: 'rgba(255, 200, 0, 0.1)',
+						border: '2px solid rgba(255, 200, 0, 0.5)',
+						borderRadius: 'var(--radius-2)',
+						marginBottom: 'var(--space-4)'
+					}}>
+						<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
+							⚠️ {loadingError}
+						</p>
+						<button 
+							className="btn-sm"
+							onClick={async () => {
+								setIsLoading(true)
+								setLoadingError(null)
+								try {
+									const ranked = await getRankedSharedItems()
+									setSharedItems(ranked)
+									// Don't set error for empty results - just show empty state
 									setLoadingError(null)
+								} catch (err) {
+									console.error('[CommunityView] Retry error:', err)
+									setLoadingError(`Error: ${err instanceof Error ? err.message : 'Failed to load'}`)
+								} finally {
+									setIsLoading(false)
 								}
-							} catch (err) {
-								console.error('[CommunityView] Retry error:', err)
-								setLoadingError(`Error: ${err instanceof Error ? err.message : 'Failed to load'}`)
-							} finally {
-								setIsLoading(false)
-							}
-						}}
-					>
-						Retry Now
-					</button>
-				</div>
-			)}
+							}}
+						>
+							Retry Now
+						</button>
+					</div>
+				)
+			})()}
 
 			{/* Items Grid */}
 			{!isLoading && sortedItems.length === 0 && !loadingError && (
