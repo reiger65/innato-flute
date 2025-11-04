@@ -177,15 +177,14 @@ class LocalLessonsService implements LessonsService {
 					}
 					
 					// Debug log for each lesson to verify fields
-					if (item.subtitle || item.description || item.topic) {
-						console.log(`[lessonsService] Loaded lesson "${lesson.title}":`, {
-							subtitle: lesson.subtitle,
-							description: lesson.description?.substring(0, 50) + '...',
-							topic: lesson.topic,
-							category: lesson.category,
-							compositionId: lesson.compositionId
-						})
-					}
+					console.log(`[lessonsService] Loaded lesson "${lesson.title}" (${lesson.id}):`, {
+						subtitle: item.subtitle || '(empty)',
+						description: item.description || '(empty)',
+						topic: item.topic || '(empty)',
+						category: item.category || '(empty)',
+						difficulty: item.difficulty || '(empty)',
+						compositionId: lesson.compositionId
+					})
 					
 					return lesson
 				})
