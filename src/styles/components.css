@@ -1193,12 +1193,17 @@ select.btn-sm:active {
 	position: relative;
 	flex-shrink: 0;
 	width: 280px;
+	height: 280px;
+	aspect-ratio: 1 / 1;
 	padding: var(--space-4);
 	border: var(--border-2) solid var(--color-black);
 	border-radius: var(--radius-2);
 	background: var(--color-white);
 	cursor: pointer;
 	transition: all 0.2s ease;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 }
 
 .lesson-card:hover:not(.is-locked) {
@@ -2297,5 +2302,6 @@ select.btn-sm:active {
 
 	.lesson-card {
 		width: 220px;
+		height: 220px;
 	}
 }
