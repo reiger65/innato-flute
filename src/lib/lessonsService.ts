@@ -545,6 +545,33 @@ class LocalLessonsService implements LessonsService {
 			sortedLessons = [...lessons].sort((a, b) => {
 				return getLessonNumber(a.id) - getLessonNumber(b.id)
 			})
+			
+			// Update titles based on custom_id number, not array position
+			// This ensures titles match the actual lesson number from custom_id
+			const updatedLessons = sortedLessons.map((lesson) => {
+				const lessonNum = getLessonNumber(lesson.id)
+				const expectedTitle = `Lesson ${lessonNum}`
+				
+				return {
+					...lesson,
+					title: expectedTitle, // Use custom_id number, not array index
+					subtitle: lesson.subtitle || '',
+					topic: (lesson as any).topic || '',
+					description: lesson.description || '' // Preserve description
+				}
+			})
+			
+			// Only save if titles changed (this will sync to Supabase via saveLessons)
+			const titlesChanged = sortedLessons.some((lesson, index) => {
+				const lessonNum = getLessonNumber(lesson.id)
+				return lesson.title !== `Lesson ${lessonNum}`
+			})
+			if (titlesChanged) {
+				await this.saveLessons(updatedLessons)
+			}
+			
+			// Use updated lessons for progress calculation
+			sortedLessons = updatedLessons
 		}
 		
 		// Update all lesson titles to match their position, then save
@@ -563,7 +590,8 @@ class LocalLessonsService implements LessonsService {
 			await this.saveLessons(updatedLessons)
 		}
 		
-		return updatedLessons.map((lesson, index) => {
+		
+		return sortedLessons.map((lesson, index) => {
 			const completed = progress[lesson.id] === true
 			// Unlock if it's the first lesson, or if previous lesson is completed
 			const unlocked = index === 0 || (index > 0 && progress[updatedLessons[index - 1].id] === true)
