@@ -416,17 +416,79 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		}
 	}
 
+	const handleSync = async () => {
+		if (!currentUser || !isAdmin(currentUser)) {
+			onShowToast?.('Only admins can sync lessons', 'error')
+			return
+		}
+
+		setLoading(true)
+		try {
+			const synced = await syncLocalLessonsToSupabase()
+			if (synced > 0) {
+				onShowToast?.(`Synced ${synced} lesson(s) to Supabase`, 'success')
+				// Wait a bit for Supabase to update, then reload
+				await new Promise(resolve => setTimeout(resolve, 500))
+				await loadLessonsData()
+			} else {
+				onShowToast?.('All lessons are already synced', 'info')
+			}
+		} catch (error) {
+			console.error('Error syncing lessons:', error)
+			onShowToast?.('Error syncing lessons to Supabase. Check console for details.', 'error')
+		} finally {
+			setLoading(false)
+		}
+	}
+
 	return (
 		<div className="modal-overlay" onClick={onClose}>
 			<div className="modal-content" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-header">
 					<h2 className="modal-title">Manage Lessons</h2>
-					<button className="icon-btn-sm" onClick={onClose} aria-label="Close">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-							<line x1="18" y1="6" x2="6" y2="18"></line>
-							<line x1="6" y1="6" x2="18" y2="18"></line>
-						</svg>
-					</button>
+					<div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+						{currentUser && isAdmin(currentUser) && (
+							<button 
+								className="icon-btn-sm" 
+								onClick={handleSync}
+								disabled={loading}
+								aria-label="Sync lessons to Supabase"
+								title="Sync local lessons to Supabase"
+								style={{
+									border: '2px solid #2563eb',
+									color: '#2563eb',
+									background: loading ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
+									opacity: loading ? 0.7 : 1,
+									cursor: loading ? 'wait' : 'pointer'
+								}}
+							>
+								<svg 
+									viewBox="0 0 24 24" 
+									fill="none" 
+									stroke="currentColor" 
+									strokeWidth="2" 
+									strokeLinecap="round" 
+									strokeLinejoin="round"
+									width="16"
+									height="16"
+									style={{
+										transform: loading ? 'rotate(360deg)' : 'rotate(0deg)',
+										transition: loading ? 'transform 0.6s linear' : 'none'
+									}}
+								>
+									<polyline points="23 4 23 10 17 10"></polyline>
+									<polyline points="1 20 1 14 7 14"></polyline>
+									<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+								</svg>
+							</button>
+						)}
+						<button className="icon-btn-sm" onClick={onClose} aria-label="Close">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
 				</div>
 
 				<div className="modal-body" style={{ maxHeight: 'calc(90vh - 200px)', overflowY: 'auto' }}>

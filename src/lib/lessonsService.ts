@@ -191,64 +191,68 @@ class LocalLessonsService implements LessonsService {
 					}
 				}
 				
-				// If admin is logged in and Supabase has lessons, check if local lessons need syncing
+				// If admin is logged in, check if local lessons need syncing
+				// This runs even when Supabase has some lessons, to catch missing ones
 				const user = getCurrentUser()
 				if (user) {
 					const { isAdmin } = await import('./authService')
-					if (isAdmin(user) && supabaseLessons.length > 0) {
+					if (isAdmin(user)) {
 						// Check if there are local lessons not in Supabase
 						const localLessonsForSync = localLoadLessons()
 						const supabaseCustomIds = new Set(supabaseLessons.map(l => l.id))
 						const localOnly = localLessonsForSync.filter(l => !supabaseCustomIds.has(l.id) && l.compositionId !== null)
 						
-						// Auto-sync local lessons that aren't in Supabase (one-time per session)
-						if (localOnly.length > 0) {
-							const syncKey = `lesson-auto-sync-${user.id}`
-							if (!sessionStorage.getItem(syncKey)) {
-								try {
-									const synced = await syncLocalLessonsToSupabase()
-									if (synced > 0) {
-										// Reload from Supabase after sync
-										const { data: reloadData } = await supabase
-											.from('lessons')
-											.select('*')
-											.order('lesson_number', { ascending: true })
+						// Auto-sync local lessons that aren't in Supabase
+						// Check if we've synced recently (within last 30 seconds) to avoid too frequent syncs
+						// but allow sync if there are missing lessons
+						const syncKey = `lesson-auto-sync-${user.id}`
+						const lastSyncTime = sessionStorage.getItem(syncKey)
+						const now = Date.now()
+						const shouldSync = !lastSyncTime || (now - parseInt(lastSyncTime, 10)) > 30000 // 30 seconds
+						
+						if (localOnly.length > 0 && shouldSync) {
+							try {
+								const synced = await syncLocalLessonsToSupabase()
+								if (synced > 0) {
+									sessionStorage.setItem(syncKey, now.toString())
+									// Reload from Supabase after sync
+									const { data: reloadData } = await supabase
+										.from('lessons')
+										.select('*')
+										.order('lesson_number', { ascending: true })
+									
+									if (reloadData) {
+										// Get deleted lesson IDs from localStorage
+										const deletedIdsKey = 'deleted-lesson-ids'
+										const deletedIds = new Set<string>(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
 										
-										if (reloadData) {
-											sessionStorage.setItem(syncKey, 'true')
-											
-											// Get deleted lesson IDs from localStorage
-											const deletedIdsKey = 'deleted-lesson-ids'
-											const deletedIds = new Set<string>(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
-											
-											const reloadedLessons = (reloadData || [])
-												.filter(item => {
-													// Filter out deleted lessons
-													const customId = item.custom_id || `lesson-${item.lesson_number}`
-													return !deletedIds.has(customId)
-												})
-												.map(item => {
-													const customId = item.custom_id || `lesson-${item.lesson_number}`
-													const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
-													return {
-														id: customId,
-														title: `Lesson ${lessonNum}`, // Always generate title from custom_id number
-														subtitle: item.subtitle || '',
-														topic: item.topic || '', // Only use topic field, don't fallback to category
-														description: item.description || '',
-														category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
-														compositionId: item.composition_id,
-														unlocked: false,
-														completed: false
-													} as Lesson
-												})
-											// Don't filter by compositionId - show all lessons from Supabase
-											return reloadedLessons
-										}
+										const reloadedLessons = (reloadData || [])
+											.filter(item => {
+												// Filter out deleted lessons
+												const customId = item.custom_id || `lesson-${item.lesson_number}`
+												return !deletedIds.has(customId)
+											})
+											.map(item => {
+												const customId = item.custom_id || `lesson-${item.lesson_number}`
+												const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
+												return {
+													id: customId,
+													title: `Lesson ${lessonNum}`, // Always generate title from custom_id number
+													subtitle: item.subtitle || '',
+													topic: item.topic || '', // Only use topic field, don't fallback to category
+													description: item.description || '',
+													category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
+													compositionId: item.composition_id,
+													unlocked: false,
+													completed: false
+												} as Lesson
+											})
+										// Don't filter by compositionId - show all lessons from Supabase
+										return reloadedLessons
 									}
-								} catch (syncError) {
-									console.error('[lessonsService] Error auto-syncing lessons:', syncError)
 								}
+							} catch (syncError) {
+								console.error('[lessonsService] Error auto-syncing lessons:', syncError)
 							}
 						}
 					}
@@ -654,26 +658,60 @@ class LocalLessonsService implements LessonsService {
 				// Extract lesson number from id like "lesson-1" -> 1
 				const lessonNumber = nextLessonNumber
 				
-				const { error } = await supabase
-					.from('lessons')
-					.insert({
-						created_by: session.user.id, // Admin who created it
-						composition_id: lesson.compositionId || null,
-						lesson_number: lessonNumber,
-						title: newLesson.title,
-						description: lesson.description || null,
-						difficulty: lesson.category, // beginner/intermediate/advanced
-						category: null, // Don't use category field - use topic instead
-						subtitle: lesson.subtitle || null,
-						topic: (lesson as any).topic || null, // Topic/category like "Progressions", "Melodies", etc.
-						custom_id: newLesson.id
-					})
+				// Try to insert into Supabase - retry once if it fails
+				let supabaseSaved = false
+				for (let attempt = 0; attempt < 2; attempt++) {
+					const { error, data } = await supabase
+						.from('lessons')
+						.insert({
+							created_by: session.user.id, // Admin who created it
+							composition_id: lesson.compositionId || null,
+							lesson_number: lessonNumber,
+							title: newLesson.title,
+							description: lesson.description || null,
+							difficulty: lesson.category, // beginner/intermediate/advanced
+							category: null, // Don't use category field - use topic instead
+							subtitle: lesson.subtitle || null,
+							topic: (lesson as any).topic || null, // Topic/category like "Progressions", "Melodies", etc.
+							custom_id: newLesson.id
+						})
+						.select()
+						.single()
+					
+					if (!error && data) {
+						supabaseSaved = true
+						break
+					}
+					
+					// If duplicate key error (lesson already exists), check if it's the same lesson
+					if (error?.code === '23505') {
+						// Check if lesson already exists with same custom_id
+						const { data: existing } = await supabase
+							.from('lessons')
+							.select('custom_id')
+							.eq('custom_id', newLesson.id)
+							.single()
+						
+						if (existing) {
+							supabaseSaved = true // Already exists, that's fine
+							break
+						}
+					}
+					
+					if (attempt === 0) {
+						// Wait a bit before retry
+						await new Promise(resolve => setTimeout(resolve, 500))
+					}
+				}
 				
-				if (error) {
-					console.warn('[lessonsService] Supabase error adding lesson, using local result:', error)
+				if (!supabaseSaved) {
+					console.error('[lessonsService] Failed to save lesson to Supabase after retries:', newLesson.id)
+					console.error('[lessonsService] Lesson will be synced automatically on next load')
+					// Don't throw - lesson is saved locally and will sync later
 				}
 			} catch (error) {
 				console.error('[lessonsService] Error adding lesson to Supabase:', error)
+				console.error('[lessonsService] Lesson saved locally and will sync automatically:', newLesson.id)
 			}
 		}
 		
