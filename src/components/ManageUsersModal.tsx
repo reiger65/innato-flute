@@ -32,9 +32,11 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 				onClose()
 				return
 			}
+			// Only load users once when modal opens
 			loadUsers()
 		}
-	}, [isOpen, onClose, onShowToast])
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isOpen])
 
 	const loadUsers = async () => {
 		if (!isSupabaseConfigured()) {
@@ -50,176 +52,107 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 
 		setLoading(true)
 		try {
-			// Get all users from Supabase Auth
-			// Note: This requires admin privileges and may need RLS policies
-			const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers()
+			// Note: supabase.auth.admin methods require service role key (server-side only)
+			// In browser, we can only get users from our own tables
+			// Get users from compositions/progressions tables
+			const [compositionsResult, progressionsResult] = await Promise.all([
+				supabase.from('compositions').select('user_id, created_by'),
+				supabase.from('progressions').select('user_id, created_by')
+			])
+
+			if (compositionsResult.error) {
+				console.error('[ManageUsersModal] Error loading compositions:', compositionsResult.error)
+			}
+			if (progressionsResult.error) {
+				console.error('[ManageUsersModal] Error loading progressions:', progressionsResult.error)
+			}
+
+			// Get unique user IDs
+			const userIds = new Set<string>()
+			compositionsResult.data?.forEach(comp => {
+				if (comp.user_id) userIds.add(comp.user_id)
+				if (comp.created_by) userIds.add(comp.created_by)
+			})
+			progressionsResult.data?.forEach(prog => {
+				if (prog.user_id) userIds.add(prog.user_id)
+				if (prog.created_by) userIds.add(prog.created_by)
+			})
+
+			if (userIds.size === 0) {
+				setUsers([])
+				setLoading(false)
+				return
+			}
+
+			// For each user ID, try to get their email from auth metadata
+			// We can't use admin API from browser, so we'll create a basic user list
+			// from what we can see in the database
+			const usersList: UserWithStats[] = []
 			
-			if (authError) {
-				// If admin.listUsers fails, try getting users from a custom table
-				// For now, we'll use a workaround: get users from compositions/progressions tables
-				console.warn('[ManageUsersModal] Admin listUsers failed, using alternative method:', authError)
-				
-				// Alternative: Get users from compositions table
-				const { data: compositions, error: compError } = await supabase
-					.from('compositions')
-					.select('user_id, created_by')
-					.order('created_at', { ascending: false })
-
-				if (compError) {
-					throw compError
-				}
-
-				// Get unique user IDs
-				const userIds = new Set<string>()
-				compositions?.forEach(comp => {
-					if (comp.user_id) userIds.add(comp.user_id)
-					if (comp.created_by) userIds.add(comp.created_by)
-				})
-
-				// Fetch user details for each ID
-				const usersList: UserWithStats[] = []
-				for (const userId of userIds) {
-					try {
-						const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId)
-						if (!userError && userData?.user) {
-							const user: UserWithStats = {
-								id: userData.user.id,
-								email: userData.user.email || '',
-								username: userData.user.user_metadata?.username,
-								role: userData.user.user_metadata?.role || 'user',
-								createdAt: new Date(userData.user.created_at).getTime(),
-								lastSignIn: userData.user.last_sign_in_at || undefined
-							}
-							usersList.push(user)
-						}
-					} catch (err) {
-						console.warn(`[ManageUsersModal] Could not fetch user ${userId}:`, err)
+			// Get current session to see if we can get user info
+			const { data: { session } } = await supabase.auth.getSession()
+			
+			// Try to get user info from profiles table if it exists, or use IDs
+			for (const userId of userIds) {
+				try {
+					// Try to get user info from a profiles table if it exists
+					// Otherwise, create a basic user object
+					const user: UserWithStats = {
+						id: userId,
+						email: userId, // Fallback: use ID as email if we can't get email
+						role: 'user',
+						createdAt: Date.now()
 					}
+					
+					// If this is the current user, we know their email
+					if (session?.user?.id === userId) {
+						user.email = session.user.email || userId
+						user.username = session.user.user_metadata?.username
+						user.role = session.user.user_metadata?.role || 'user'
+					}
+					
+					usersList.push(user)
+				} catch (err) {
+					console.warn(`[ManageUsersModal] Could not process user ${userId}:`, err)
 				}
+			}
 
-				// Load stats for each user
-				for (const user of usersList) {
-					const [compCount, progCount, sharedCount] = await Promise.all([
-						supabase.from('compositions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-						supabase.from('progressions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-						supabase.from('shared_items').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
-					])
+			// Load stats for each user
+			for (const user of usersList) {
+				const [compCount, progCount, sharedCount] = await Promise.all([
+					supabase.from('compositions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+					supabase.from('progressions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+					supabase.from('shared_items').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
+				])
 
-					user.compositionsCount = compCount.count || 0
-					user.progressionsCount = progCount.count || 0
-					user.sharedItemsCount = sharedCount.count || 0
-				}
+				user.compositionsCount = compCount.count || 0
+				user.progressionsCount = progCount.count || 0
+				user.sharedItemsCount = sharedCount.count || 0
+			}
 
-				setUsers(usersList)
-			} else if (authUsers) {
-				// Convert auth users to our User format
-				const usersList: UserWithStats[] = authUsers.map(authUser => ({
-					id: authUser.id,
-					email: authUser.email || '',
-					username: authUser.user_metadata?.username,
-					role: authUser.user_metadata?.role || 'user',
-					createdAt: new Date(authUser.created_at).getTime(),
-					lastSignIn: authUser.last_sign_in_at || undefined
-				}))
-
-				// Load stats for each user
-				for (const user of usersList) {
-					const [compCount, progCount, sharedCount] = await Promise.all([
-						supabase.from('compositions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-						supabase.from('progressions').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-						supabase.from('shared_items').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
-					])
-
-					user.compositionsCount = compCount.count || 0
-					user.progressionsCount = progCount.count || 0
-					user.sharedItemsCount = sharedCount.count || 0
-				}
-
-				setUsers(usersList)
+			setUsers(usersList)
+			
+			if (usersList.length > 0 && usersList[0].email === usersList[0].id) {
+				onShowToast?.('Note: User management requires server-side admin API. Email addresses may not be available.', 'info')
 			}
 		} catch (error) {
 			console.error('[ManageUsersModal] Error loading users:', error)
-			onShowToast?.('Failed to load users. Check console for details.', 'error')
+			onShowToast?.('Failed to load users. Admin API calls require server-side access.', 'error')
 		} finally {
 			setLoading(false)
 		}
 	}
 
-	const handleToggleAdmin = async (user: UserWithStats) => {
-		if (!isSupabaseConfigured()) {
-			onShowToast?.('Supabase is not configured', 'error')
-			return
-		}
-
-		const supabase = getSupabaseClient()
-		if (!supabase) {
-			onShowToast?.('Supabase client not available', 'error')
-			return
-		}
-
-		const newRole = user.role === 'admin' ? 'user' : 'admin'
-		
-		setLoading(true)
-		try {
-			// Update user metadata
-			const { error } = await supabase.auth.admin.updateUserById(user.id, {
-				user_metadata: {
-					...user,
-					role: newRole
-				}
-			})
-
-			if (error) {
-				throw error
-			}
-
-			// Update local state
-			setUsers(users.map(u => u.id === user.id ? { ...u, role: newRole } : u))
-			onShowToast?.(
-				`User ${newRole === 'admin' ? 'promoted to admin' : 'demoted to user'}`,
-				'success'
-			)
-		} catch (error) {
-			console.error('[ManageUsersModal] Error updating user role:', error)
-			onShowToast?.('Failed to update user role. Check console for details.', 'error')
-		} finally {
-			setLoading(false)
-		}
+	const handleToggleAdmin = async (_user: UserWithStats) => {
+		onShowToast?.('User role management requires server-side admin API. This feature is not available in the browser.', 'error')
+		// Note: supabase.auth.admin methods require service role key (server-side only)
+		// This would need to be implemented via a server endpoint or Edge Function
 	}
 
-	const handleDeleteUser = async (user: UserWithStats) => {
-		if (!confirm(`Are you sure you want to delete user "${user.email}"? This action cannot be undone and will delete all their data.`)) {
-			return
-		}
-
-		if (!isSupabaseConfigured()) {
-			onShowToast?.('Supabase is not configured', 'error')
-			return
-		}
-
-		const supabase = getSupabaseClient()
-		if (!supabase) {
-			onShowToast?.('Supabase client not available', 'error')
-			return
-		}
-
-		setLoading(true)
-		try {
-			const { error } = await supabase.auth.admin.deleteUser(user.id)
-
-			if (error) {
-				throw error
-			}
-
-			setUsers(users.filter(u => u.id !== user.id))
-			setSelectedUser(null)
-			onShowToast?.('User deleted successfully', 'success')
-		} catch (error) {
-			console.error('[ManageUsersModal] Error deleting user:', error)
-			onShowToast?.('Failed to delete user. Check console for details.', 'error')
-		} finally {
-			setLoading(false)
-		}
+	const handleDeleteUser = async (_user: UserWithStats) => {
+		onShowToast?.('User deletion requires server-side admin API. This feature is not available in the browser.', 'error')
+		// Note: supabase.auth.admin methods require service role key (server-side only)
+		// This would need to be implemented via a server endpoint or Edge Function
 	}
 
 	if (!isOpen) return null

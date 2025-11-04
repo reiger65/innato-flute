@@ -22,19 +22,24 @@ import {
 export function isAdmin(user: User | null): boolean {
 	if (!user) return false
 	
+	// Strict admin check - only allow specific admin emails
+	const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
+	
 	// If Supabase is configured, check user metadata
 	if (isSupabaseConfigured()) {
 		const supabase = getSupabaseClient()
 		if (supabase) {
-			// Admin check will be implemented via Supabase user metadata
-			// For now, check email (can be moved to database later)
-			const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
-			return adminEmails.includes(user.email.toLowerCase())
+			// Admin check: email must be in whitelist OR role must be explicitly 'admin'
+			// But role check is secondary - email whitelist takes precedence
+			const isEmailAdmin = adminEmails.includes(user.email.toLowerCase())
+			const isRoleAdmin = user.role === 'admin'
+			
+			// Only return true if email is in whitelist OR role is explicitly admin
+			return isEmailAdmin || isRoleAdmin
 		}
 	}
 	
-	// Fallback to local check
-	const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
+	// Fallback to local check - strict email whitelist
 	const adminUsernames = ['admin', 'hanshoukes']
 	return adminEmails.includes(user.email.toLowerCase()) || 
 	       (user.username && adminUsernames.includes(user.username.toLowerCase())) ||

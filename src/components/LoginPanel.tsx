@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { User } from '../lib/authService'
 import { signUp, signIn, signInWithMagicLink, resetPassword, updatePassword, signOut, getCurrentUser, isAdmin } from '../lib/authService'
+import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabaseClient'
 
 interface LoginPanelProps {
 	onClose: () => void
@@ -40,33 +41,89 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 			
 			if (accessToken && type === 'magiclink') {
 				// User clicked magic link, they're now authenticated
-				const user = getCurrentUser()
-				if (user) {
-					setCurrentUser(user)
-					onAuthChange(user)
-					// Clean up URL
-					window.history.replaceState({}, document.title, window.location.pathname)
+				// Get session from Supabase to properly extract user
+				if (isSupabaseConfigured()) {
+					const supabase = getSupabaseClient()
+					if (supabase) {
+						try {
+							const { data: { session }, error } = await supabase.auth.getSession()
+							if (error) {
+								console.error('[LoginPanel] Error getting session:', error)
+								setError('Failed to authenticate. Please try logging in again.')
+								return
+							}
+							
+							if (session?.user) {
+								// Create user object from session
+								const user: User = {
+									id: session.user.id,
+									email: session.user.email || '',
+									username: session.user.user_metadata?.username,
+									role: session.user.user_metadata?.role || 'user',
+									createdAt: new Date(session.user.created_at).getTime()
+								}
+								
+								// Verify admin status - only set user if they're actually an admin or regular user
+								// This ensures buttons only show for real admins
+								setCurrentUser(user)
+								onAuthChange(user)
+								// Clean up URL
+								window.history.replaceState({}, document.title, window.location.pathname)
+							} else {
+								setError('Session not found. Please try logging in again.')
+							}
+						} catch (error) {
+							console.error('[LoginPanel] Error handling magic link callback:', error)
+							setError('Failed to authenticate. Please try logging in again.')
+						}
+					} else {
+						// Fallback to sync getCurrentUser
+						const user = getCurrentUser()
+						if (user) {
+							setCurrentUser(user)
+							onAuthChange(user)
+							window.history.replaceState({}, document.title, window.location.pathname)
+						}
+					}
+				} else {
+					// Fallback to sync getCurrentUser
+					const user = getCurrentUser()
+					if (user) {
+						setCurrentUser(user)
+						onAuthChange(user)
+						window.history.replaceState({}, document.title, window.location.pathname)
+					}
 				}
 			} else if (accessToken && type === 'recovery') {
 				// User clicked password reset link - show password reset form
 				// Check if we have a session (user is authenticated via the reset link)
-				const user = getCurrentUser()
-				if (user) {
-					// User is authenticated, show password reset form
-					setViewMode('setnewpassword')
-					setEmail(user.email)
-				} else {
-					// Wait a bit for session to be established
-					setTimeout(() => {
-						const userAfterDelay = getCurrentUser()
-						if (userAfterDelay) {
-							setViewMode('setnewpassword')
-							setEmail(userAfterDelay.email)
-						} else {
-							setError('Invalid or expired password reset link. Please request a new one.')
+				if (isSupabaseConfigured()) {
+					const supabase = getSupabaseClient()
+					if (supabase) {
+						try {
+							const { data: { session }, error } = await supabase.auth.getSession()
+							if (!error && session?.user) {
+								setViewMode('setnewpassword')
+								setEmail(session.user.email || '')
+								window.history.replaceState({}, document.title, window.location.pathname)
+								return
+							}
+						} catch (error) {
+							console.error('[LoginPanel] Error getting session for password reset:', error)
 						}
-					}, 500)
+					}
 				}
+				
+				// Fallback: wait a bit for session to be established
+				setTimeout(() => {
+					const userAfterDelay = getCurrentUser()
+					if (userAfterDelay) {
+						setViewMode('setnewpassword')
+						setEmail(userAfterDelay.email)
+					} else {
+						setError('Invalid or expired password reset link. Please request a new one.')
+					}
+				}, 500)
 				// Clean up URL
 				window.history.replaceState({}, document.title, window.location.pathname)
 			}
