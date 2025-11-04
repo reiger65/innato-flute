@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
 import type { User } from '../lib/authService'
-import { signUp, signIn, signInWithMagicLink, resetPassword, signOut, getCurrentUser } from '../lib/authService'
+import { signUp, signIn, signInWithMagicLink, resetPassword, updatePassword, signOut, getCurrentUser, isAdmin } from '../lib/authService'
 
 interface LoginPanelProps {
 	onClose: () => void
 	onAuthChange: (user: User | null) => void
+	onShowManageUsers?: () => void
 }
 
-type ViewMode = 'login' | 'signup' | 'magiclink' | 'resetpassword'
+type ViewMode = 'login' | 'signup' | 'magiclink' | 'resetpassword' | 'setnewpassword'
 
-export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
+export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPanelProps) {
 	const [viewMode, setViewMode] = useState<ViewMode>('login')
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
@@ -19,6 +20,8 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 	const [magicLinkSent, setMagicLinkSent] = useState(false)
 	const [passwordResetSent, setPasswordResetSent] = useState(false)
 	const [showPassword, setShowPassword] = useState(false)
+	const [newPassword, setNewPassword] = useState('')
+	const [confirmPassword, setConfirmPassword] = useState('')
 	const [currentUser, setCurrentUser] = useState<User | null>(null)
 
 	// Check for existing session on mount
@@ -28,9 +31,9 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		onAuthChange(user)
 	}, [onAuthChange])
 
-	// Handle magic link callback from URL
+	// Handle magic link and password reset callbacks from URL
 	useEffect(() => {
-		const handleMagicLinkCallback = async () => {
+		const handleAuthCallback = async () => {
 			const urlParams = new URLSearchParams(window.location.search)
 			const accessToken = urlParams.get('access_token')
 			const type = urlParams.get('type')
@@ -44,10 +47,32 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 					// Clean up URL
 					window.history.replaceState({}, document.title, window.location.pathname)
 				}
+			} else if (accessToken && type === 'recovery') {
+				// User clicked password reset link - show password reset form
+				// Check if we have a session (user is authenticated via the reset link)
+				const user = getCurrentUser()
+				if (user) {
+					// User is authenticated, show password reset form
+					setViewMode('setnewpassword')
+					setEmail(user.email)
+				} else {
+					// Wait a bit for session to be established
+					setTimeout(() => {
+						const userAfterDelay = getCurrentUser()
+						if (userAfterDelay) {
+							setViewMode('setnewpassword')
+							setEmail(userAfterDelay.email)
+						} else {
+							setError('Invalid or expired password reset link. Please request a new one.')
+						}
+					}, 500)
+				}
+				// Clean up URL
+				window.history.replaceState({}, document.title, window.location.pathname)
 			}
 		}
 		
-		handleMagicLinkCallback()
+		handleAuthCallback()
 	}, [onAuthChange])
 
 	const handleSignUp = async (e: React.FormEvent) => {
@@ -153,6 +178,43 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		}
 	}
 
+	const handleSetNewPassword = async (e: React.FormEvent) => {
+		e.preventDefault()
+		setError('')
+		setLoading(true)
+
+		if (!newPassword || newPassword.length < 6) {
+			setError('Password must be at least 6 characters')
+			setLoading(false)
+			return
+		}
+
+		if (newPassword !== confirmPassword) {
+			setError('Passwords do not match')
+			setLoading(false)
+			return
+		}
+
+		const result = await updatePassword(newPassword)
+		setLoading(false)
+
+		if (result.success) {
+			// Password updated successfully
+			const user = getCurrentUser()
+			if (user) {
+				setCurrentUser(user)
+				onAuthChange(user)
+				setNewPassword('')
+				setConfirmPassword('')
+				setViewMode('login')
+			} else {
+				setError('Password updated, but login failed. Please try logging in.')
+			}
+		} else {
+			setError(result.error || 'Failed to update password')
+		}
+	}
+
 	const handleSignOut = async () => {
 		await signOut()
 		setCurrentUser(null)
@@ -165,6 +227,8 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		setEmail('')
 		setPassword('')
 		setUsername('')
+		setNewPassword('')
+		setConfirmPassword('')
 		setMagicLinkSent(false)
 		setPasswordResetSent(false)
 		setShowPassword(false)
@@ -220,10 +284,33 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 							<button
 								className="btn"
 								onClick={handleSignOut}
-								style={{ width: '100%' }}
+								style={{ width: '100%', marginBottom: 'var(--space-2)' }}
 							>
 								Sign Out
 							</button>
+							{currentUser && isAdmin(currentUser) && onShowManageUsers && (
+								<button
+									className="btn-sm"
+									onClick={() => {
+										onClose()
+										onShowManageUsers()
+									}}
+									style={{ 
+										width: '100%',
+										border: '2px solid #dc2626',
+										color: '#dc2626',
+										background: 'transparent'
+									}}
+								>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }}>
+										<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+										<circle cx="9" cy="7" r="4"></circle>
+										<path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+										<path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+									</svg>
+									Manage Users
+								</button>
+							)}
 						</div>
 					) : magicLinkSent ? (
 						// Magic link sent confirmation
@@ -306,6 +393,197 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 							>
 								Back to login
 							</button>
+						</div>
+					) : viewMode === 'setnewpassword' ? (
+						// Set new password form (after clicking reset link)
+						<div>
+							<div style={{ 
+								marginBottom: 'var(--space-4)',
+								padding: 'var(--space-3)',
+								background: 'rgba(0, 0, 0, 0.05)',
+								borderRadius: 'var(--radius-2)',
+								border: 'var(--border-1) solid rgba(0, 0, 0, 0.1)'
+							}}>
+								<p style={{ 
+									fontSize: 'var(--font-size-sm)', 
+									color: 'rgba(0, 0, 0, 0.7)',
+									margin: 0,
+									lineHeight: 1.5
+								}}>
+									Enter your new password below. Make sure it's at least 6 characters long.
+								</p>
+							</div>
+							<form onSubmit={handleSetNewPassword}>
+								<div style={{ marginBottom: 'var(--space-3)' }}>
+									<label style={{ 
+										display: 'block', 
+										marginBottom: 'var(--space-1)', 
+										fontSize: 'var(--font-size-xs)', 
+										fontWeight: 'var(--font-weight-semibold)',
+										textTransform: 'uppercase',
+										letterSpacing: '0.5px',
+										color: 'rgba(0, 0, 0, 0.7)'
+									}}>
+										New Password
+									</label>
+									<div style={{ position: 'relative' }}>
+										<input
+											type={showPassword ? 'text' : 'password'}
+											value={newPassword}
+											onChange={(e) => setNewPassword(e.target.value)}
+											placeholder="••••••••"
+											required
+											minLength={6}
+											className="modal-input"
+											autoComplete="new-password"
+											style={{ paddingRight: '40px' }}
+										/>
+										<button
+											type="button"
+											onClick={() => setShowPassword(!showPassword)}
+											style={{
+												position: 'absolute',
+												right: '8px',
+												top: '50%',
+												transform: 'translateY(-50%)',
+												background: 'none',
+												border: 'none',
+												cursor: 'pointer',
+												padding: '4px',
+												display: 'flex',
+												alignItems: 'center',
+												justifyContent: 'center',
+												color: 'rgba(0, 0, 0, 0.5)',
+												transition: 'color 0.2s ease'
+											}}
+											onMouseEnter={(e) => {
+												e.currentTarget.style.color = 'rgba(0, 0, 0, 0.8)'
+											}}
+											onMouseLeave={(e) => {
+												e.currentTarget.style.color = 'rgba(0, 0, 0, 0.5)'
+											}}
+											aria-label={showPassword ? 'Hide password' : 'Show password'}
+											title={showPassword ? 'Hide password' : 'Show password'}
+										>
+											{showPassword ? (
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+													<line x1="1" y1="1" x2="23" y2="23"></line>
+												</svg>
+											) : (
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+													<circle cx="12" cy="12" r="3"></circle>
+												</svg>
+											)}
+										</button>
+									</div>
+								</div>
+
+								<div style={{ marginBottom: 'var(--space-4)' }}>
+									<label style={{ 
+										display: 'block', 
+										marginBottom: 'var(--space-1)', 
+										fontSize: 'var(--font-size-xs)', 
+										fontWeight: 'var(--font-weight-semibold)',
+										textTransform: 'uppercase',
+										letterSpacing: '0.5px',
+										color: 'rgba(0, 0, 0, 0.7)'
+									}}>
+										Confirm Password
+									</label>
+									<div style={{ position: 'relative' }}>
+										<input
+											type={showPassword ? 'text' : 'password'}
+											value={confirmPassword}
+											onChange={(e) => setConfirmPassword(e.target.value)}
+											placeholder="••••••••"
+											required
+											minLength={6}
+											className="modal-input"
+											autoComplete="new-password"
+											style={{ paddingRight: '40px' }}
+										/>
+										<button
+											type="button"
+											onClick={() => setShowPassword(!showPassword)}
+											style={{
+												position: 'absolute',
+												right: '8px',
+												top: '50%',
+												transform: 'translateY(-50%)',
+												background: 'none',
+												border: 'none',
+												cursor: 'pointer',
+												padding: '4px',
+												display: 'flex',
+												alignItems: 'center',
+												justifyContent: 'center',
+												color: 'rgba(0, 0, 0, 0.5)',
+												transition: 'color 0.2s ease'
+											}}
+											onMouseEnter={(e) => {
+												e.currentTarget.style.color = 'rgba(0, 0, 0, 0.8)'
+											}}
+											onMouseLeave={(e) => {
+												e.currentTarget.style.color = 'rgba(0, 0, 0, 0.5)'
+											}}
+											aria-label={showPassword ? 'Hide password' : 'Show password'}
+											title={showPassword ? 'Hide password' : 'Show password'}
+										>
+											{showPassword ? (
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+													<line x1="1" y1="1" x2="23" y2="23"></line>
+												</svg>
+											) : (
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+													<circle cx="12" cy="12" r="3"></circle>
+												</svg>
+											)}
+										</button>
+									</div>
+								</div>
+
+								{error && (
+									<div style={{ 
+										marginBottom: 'var(--space-3)', 
+										padding: 'var(--space-3)', 
+										background: 'var(--color-white)', 
+										border: 'var(--border-2) solid var(--color-black)', 
+										borderRadius: 'var(--radius-2)',
+										color: 'var(--color-black)',
+										fontSize: 'var(--font-size-sm)'
+									}}>
+										{error}
+									</div>
+								)}
+
+								<button
+									type="submit"
+									className="btn"
+									disabled={loading}
+									style={{ width: '100%', marginBottom: 'var(--space-3)' }}
+								>
+									{loading ? 'Updating...' : 'Set New Password'}
+								</button>
+
+								<div style={{ 
+									marginTop: 'var(--space-4)',
+									paddingTop: 'var(--space-4)',
+									borderTop: 'var(--border-1) solid rgba(0, 0, 0, 0.2)'
+								}}>
+									<button
+										type="button"
+										className="btn-sm"
+										onClick={() => switchMode('login')}
+										style={{ width: '100%' }}
+									>
+										Back to login
+									</button>
+								</div>
+							</form>
 						</div>
 					) : (
 						// Login/Signup/Magic Link view

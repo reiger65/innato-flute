@@ -8,6 +8,7 @@ import { ComposerView, type ComposerViewRef } from './components/ComposerView'
 import { SectionInfoModal } from './components/SectionInfoModal'
 import { CommunityView } from './components/CommunityView'
 import { ManageLessonsModal } from './components/ManageLessonsModal'
+import { ManageUsersModal } from './components/ManageUsersModal'
 import { ToastContainer, useToast } from './components/Toast'
 import { fingeringToOpenStates, getFingeringForChord, getChordIdFromFingering } from './lib/chordMappings'
 import { simplePlayer, type TuningFrequency } from './lib/simpleAudioPlayer'
@@ -85,6 +86,7 @@ export default function App() {
 	const [showManageProgressionsModal, setShowManageProgressionsModal] = useState(false)
 	const [progressionModalRefresh, setProgressionModalRefresh] = useState(0)
 	const [showManageLessonsModal, setShowManageLessonsModal] = useState(false)
+	const [showManageUsersModal, setShowManageUsersModal] = useState(false)
 	const [meditationIndex, setMeditationIndex] = useState(0)
 	const [breathingIndex, setBreathingIndex] = useState(0)
 	const [showPracticeInfo, setShowPracticeInfo] = useState(false)
@@ -2380,6 +2382,7 @@ export default function App() {
 				<LoginPanel
 					onClose={() => setShowLogin(false)}
 					onAuthChange={handleAuthChange}
+					onShowManageUsers={() => setShowManageUsersModal(true)}
 				/>
 			)}
 
@@ -2415,6 +2418,20 @@ export default function App() {
 								setSelectedLesson(nextLesson)
 							}, 150)
 						}
+					}}
+				/>
+			)}
+
+			{/* Manage Users Modal */}
+			{showManageUsersModal && currentUser && isAdmin(currentUser) && (
+				<ManageUsersModal
+					isOpen={showManageUsersModal}
+					onClose={() => setShowManageUsersModal(false)}
+					onShowToast={(message: string, type: 'success' | 'error' | 'info' | 'warning', duration?: number) => {
+						if (type === 'success') toast.showSuccess(message, duration)
+						else if (type === 'error') toast.showError(message, duration)
+						else if (type === 'warning') toast.showWarning(message, duration)
+						else toast.showInfo(message, duration)
 					}}
 				/>
 			)}

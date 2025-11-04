@@ -166,6 +166,39 @@ export async function signUp(email: string, password: string, username?: string)
 }
 
 /**
+ * Update password after password reset
+ */
+export async function updatePassword(newPassword: string): Promise<AuthResult> {
+	if (isSupabaseConfigured()) {
+		const supabase = getSupabaseClient()
+		
+		if (supabase) {
+			try {
+				const { error } = await supabase.auth.updateUser({
+					password: newPassword
+				})
+				
+				if (error) {
+					return { success: false, error: error.message }
+				}
+				
+				// Password updated successfully
+				const user = getCurrentUser()
+				if (user) {
+					return { success: true, user }
+				}
+				return { success: true, user: undefined }
+			} catch (error) {
+				console.error('Password update error:', error)
+				return { success: false, error: 'Failed to update password. Please try again.' }
+			}
+		}
+	}
+	
+	return { success: false, error: 'Password update not available.' }
+}
+
+/**
  * Reset password (send password reset email)
  */
 export async function resetPassword(email: string): Promise<AuthResult> {
@@ -174,8 +207,10 @@ export async function resetPassword(email: string): Promise<AuthResult> {
 		
 		if (supabase) {
 			try {
+				// Use current origin (works for both localhost and production)
+				const redirectTo = `${window.location.origin}?type=recovery`
 				const { error } = await supabase.auth.resetPasswordForEmail(email, {
-					redirectTo: `${window.location.origin}?type=recovery`
+					redirectTo
 				})
 				
 				if (error) {
