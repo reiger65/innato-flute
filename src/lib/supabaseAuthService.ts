@@ -124,7 +124,8 @@ export async function signUp(email: string, password: string, username?: string)
 					options: {
 						data: {
 							username: username || email.split('@')[0]
-						}
+						},
+						emailRedirectTo: `${window.location.origin}`
 					}
 				})
 				
@@ -133,6 +134,16 @@ export async function signUp(email: string, password: string, username?: string)
 				}
 				
 				if (data.user) {
+					// Check if email confirmation is required
+					// If no session is returned, user needs to confirm email
+					if (!data.session) {
+						// Still return success but with a message about email confirmation
+						return { 
+							success: true, 
+							user: undefined
+						}
+					}
+					
 					const user: User = {
 						id: data.user.id,
 						email: data.user.email || email,

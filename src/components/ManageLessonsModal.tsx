@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { loadLessons, updateLesson, deleteLesson, reorderLessons, syncLocalLessonsToSupabase, type Lesson } from '../lib/lessonsService'
-import { getCurrentUser, isAdmin } from '../lib/authService'
+import { getCurrentUser, isAdmin, type User } from '../lib/authService'
 import { getSupabaseClient } from '../lib/supabaseClient'
 import { loadCategories, addCategory } from '../lib/categoriesService'
 
@@ -24,10 +24,32 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	const [editDescription, setEditDescription] = useState('')
 	const [editCategory, setEditCategory] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
-	const currentUser = getCurrentUser()
+	const [currentUser, setCurrentUser] = useState<User | null>(null)
+
+	// Check admin status and prevent non-admins from accessing
+	useEffect(() => {
+		const user = getCurrentUser()
+		setCurrentUser(user)
+		
+		// If modal is opened but user is not admin, close it immediately
+		if (isOpen) {
+			if (!user || !isAdmin(user)) {
+				onShowToast?.('You must be an admin to manage lessons', 'error')
+				onClose()
+				return
+			}
+		}
+	}, [isOpen, onClose, onShowToast])
 
 	useEffect(() => {
 		if (isOpen) {
+			// Double-check admin status before loading data
+			const user = getCurrentUser()
+			if (!user || !isAdmin(user)) {
+				onClose()
+				return
+			}
+			
 			loadLessonsData()
 			
 			// Load category suggestions and initialize defaults if empty
@@ -39,7 +61,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			}
 			setCategorySuggestions(suggestions)
 		}
-	}, [isOpen])
+	}, [isOpen, onClose])
 
 	// Handle Escape key to close modal
 	useEffect(() => {
@@ -56,11 +78,17 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	}, [isOpen, onClose])
 
 	const loadLessonsData = async () => {
+		// Double-check admin status before proceeding
+		const user = getCurrentUser()
+		if (!user || !isAdmin(user)) {
+			onClose()
+			return
+		}
+		
 		setLoading(true)
 		try {
 			// If admin is logged in, sync local lessons to Supabase first
-			const currentUser = getCurrentUser()
-			if (currentUser && isAdmin(currentUser)) {
+			if (user && isAdmin(user)) {
 				// Always try to sync (don't use sessionStorage check here - we want to sync every time modal opens)
 				try {
 					const synced = await syncLocalLessonsToSupabase()
@@ -425,12 +453,12 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 								className="icon-btn-sm" 
 								onClick={handleSync}
 								disabled={loading}
-								aria-label="Sync lessons to Supabase"
-								title="Sync local lessons to Supabase"
+								aria-label="Sync lessons to Supabase (Admin)"
+								title="Sync local lessons to Supabase (Admin)"
 								style={{
-									border: '2px solid #2563eb',
-									color: '#2563eb',
-									background: loading ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
+									border: '2px solid #dc2626',
+									color: '#dc2626',
+									background: loading ? 'rgba(220, 38, 38, 0.1)' : 'transparent',
 									opacity: loading ? 0.7 : 1,
 									cursor: loading ? 'wait' : 'pointer'
 								}}

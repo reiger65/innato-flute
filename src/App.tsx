@@ -1205,8 +1205,15 @@ export default function App() {
 								{currentUser && isAdmin(currentUser) && (
 									<button 
 										className="btn-sm"
-										onClick={() => setShowManageLessonsModal(true)}
-										title="Manage Lessons (Admin)"
+										onClick={() => {
+											// Double-check admin status before opening modal
+											if (currentUser && isAdmin(currentUser)) {
+												setShowManageLessonsModal(true)
+											} else {
+												toast.showError('You must be an admin to manage lessons', 3000)
+											}
+										}}
+										title="Manage Lessons (Admin Only)"
 										style={{ 
 											marginLeft: 'auto',
 											border: '2px solid #dc2626',
@@ -2405,7 +2412,7 @@ export default function App() {
 			)}
 
 			{/* Manage Lessons Modal */}
-			{showManageLessonsModal && (
+			{showManageLessonsModal && currentUser && isAdmin(currentUser) && (
 				<ManageLessonsModal
 					isOpen={showManageLessonsModal}
 					onClose={() => setShowManageLessonsModal(false)}
