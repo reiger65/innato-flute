@@ -156,9 +156,16 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			}
 			
 			// Wait a bit for Supabase to update before reloading
-			await new Promise(resolve => setTimeout(resolve, 500))
+			await new Promise(resolve => setTimeout(resolve, 1000)) // Increased delay to 1 second
 			
+			// Force reload lessons from Supabase
+			console.log('[ManageLessonsModal] Reloading lessons after update...')
 			await loadLessonsData()
+			
+			// Double-check: reload again after a short delay to ensure Supabase sync
+			await new Promise(resolve => setTimeout(resolve, 500))
+			await loadLessonsData()
+			
 			setEditingLesson(null)
 			onSuccess()
 			onShowToast?.('Lesson updated successfully.', 'success')

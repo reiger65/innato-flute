@@ -465,6 +465,27 @@ class LocalLessonsService implements LessonsService {
 					return localResult
 				}
 				
+				// First, verify the lesson exists in Supabase
+				const { data: existingLesson, error: checkError } = await supabase
+					.from('lessons')
+					.select('id, custom_id, subtitle, description, topic')
+					.eq('custom_id', lessonId)
+					.single()
+				
+				if (checkError || !existingLesson) {
+					console.error(`[lessonsService] Lesson ${lessonId} not found in Supabase:`, checkError)
+					console.warn('[lessonsService] Falling back to localStorage only')
+					return localResult
+				}
+				
+				console.log(`[lessonsService] Found lesson in Supabase:`, {
+					id: existingLesson.id,
+					custom_id: existingLesson.custom_id,
+					current_subtitle: existingLesson.subtitle,
+					current_description: existingLesson.description,
+					current_topic: existingLesson.topic
+				})
+				
 				const { error, data } = await supabase
 					.from('lessons')
 					.update(updateData)
@@ -472,7 +493,8 @@ class LocalLessonsService implements LessonsService {
 					.select()
 				
 				if (error) {
-					console.warn('[lessonsService] Supabase error updating lesson, using local result:', error)
+					console.error('[lessonsService] Supabase error updating lesson:', error)
+					console.warn('[lessonsService] Using local result only')
 				} else {
 					console.log(`[lessonsService] Successfully updated lesson ${lessonId}. Rows updated: ${data?.length || 0}`)
 					if (data && data.length > 0) {
@@ -481,6 +503,8 @@ class LocalLessonsService implements LessonsService {
 							description: data[0].description,
 							topic: data[0].topic
 						})
+					} else {
+						console.warn(`[lessonsService] Update succeeded but no data returned for lesson ${lessonId}`)
 					}
 				}
 			} catch (error) {
