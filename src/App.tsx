@@ -1202,32 +1202,40 @@ export default function App() {
 							{/* Section header */}
 							<div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
 								<div className="section-title" style={{ margin: 0 }}>All Lessons</div>
-								{currentUser && isAdmin(currentUser) && (
-									<button 
-										className="btn-sm"
-										onClick={() => {
-											// Double-check admin status before opening modal
-											if (currentUser && isAdmin(currentUser)) {
+								{(() => {
+									// Double-check admin status explicitly
+									if (!currentUser) return null
+									const userIsAdmin = isAdmin(currentUser)
+									if (!userIsAdmin) return null
+									
+									return (
+										<button 
+											className="btn-sm"
+											onClick={() => {
+												// Triple-check admin status before opening modal
+												const user = getCurrentUser()
+												if (!user || !isAdmin(user)) {
+													toast.showError('You must be an admin to manage lessons', 3000)
+													return
+												}
 												setShowManageLessonsModal(true)
-											} else {
-												toast.showError('You must be an admin to manage lessons', 3000)
-											}
-										}}
-										title="Manage Lessons (Admin Only)"
-										style={{ 
-											marginLeft: 'auto',
-											border: '2px solid #dc2626',
-											color: '#dc2626',
-											background: 'transparent'
-										}}
-									>
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ marginRight: '4px' }}>
-											<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-											<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-										</svg>
-										Manage
-									</button>
-								)}
+											}}
+											title="Manage Lessons (Admin Only)"
+											style={{ 
+												marginLeft: 'auto',
+												border: '2px solid #dc2626',
+												color: '#dc2626',
+												background: 'transparent'
+											}}
+										>
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ marginRight: '4px' }}>
+												<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+												<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+											</svg>
+											Manage
+										</button>
+									)
+								})()}
 								<button 
 									className="section-info-btn"
 									onClick={() => setShowLessonsInfo(true)}
