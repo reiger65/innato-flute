@@ -165,6 +165,28 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		}
 	}
 
+	const handleDeleteAllLessons = async () => {
+		if (!window.confirm(`⚠️ WARNING: Delete ALL ${lessons.length} lesson(s)? This action cannot be undone!\n\nAfter deletion, you can re-add lessons from the Composer with correct fields.`)) {
+			return
+		}
+
+		setLoading(true)
+		try {
+			// Delete all lessons one by one
+			for (const lesson of lessons) {
+				await deleteLesson(lesson.id)
+			}
+			await loadLessonsData()
+			onSuccess()
+			onShowToast?.(`Deleted all ${lessons.length} lesson(s). You can now re-add them from the Composer.`, 'success')
+		} catch (error) {
+			console.error('Error deleting all lessons:', error)
+			onShowToast?.('Failed to delete all lessons. Please try again.', 'error')
+		} finally {
+			setLoading(false)
+		}
+	}
+
 	const handleCleanupDummyLessons = async () => {
 		const dummyCount = lessons.filter(l => !l.compositionId).length
 		if (dummyCount === 0) {
@@ -723,7 +745,23 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				</div>
 
 				<div className="modal-footer">
-					<div style={{ display: 'flex', gap: 'var(--space-2)', marginRight: 'auto' }}>
+					<div style={{ display: 'flex', gap: 'var(--space-2)', marginRight: 'auto', flexWrap: 'wrap' }}>
+						{currentUser && isAdmin(currentUser) && lessons.length > 0 && (
+							<button 
+								className="btn-sm" 
+								onClick={handleDeleteAllLessons} 
+								disabled={loading}
+								style={{ 
+									background: 'transparent',
+									border: '2px solid #dc2626',
+									color: '#dc2626',
+									fontWeight: 'bold'
+								}}
+								title="Delete all lessons (you can re-add them from Composer)"
+							>
+								🗑️ Delete All Lessons ({lessons.length})
+							</button>
+						)}
 						{currentUser && isAdmin(currentUser) && (
 							<button 
 								className="btn-sm" 
