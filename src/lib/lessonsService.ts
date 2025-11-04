@@ -461,10 +461,10 @@ class LocalLessonsService implements LessonsService {
 						lesson_number: lessonNumber,
 						title: localLesson.title,
 						description: lesson.description || null,
-						difficulty: lesson.category,
-						category: (lesson as any).topic || null,
+						difficulty: lesson.category, // beginner/intermediate/advanced
+						category: null, // Don't use category field - use topic instead
 						subtitle: lesson.subtitle || null,
-						topic: (lesson as any).topic || null,
+						topic: (lesson as any).topic || null, // Topic/category like "Progressions", "Melodies", etc.
 						custom_id: localLesson.id
 					})
 				
