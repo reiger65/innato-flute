@@ -218,6 +218,17 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			// Load lessons from localStorage (should have correct values)
 			const localLessons = localLoadLessons()
 			console.log(`[FixLessons] Found ${localLessons.length} lessons in localStorage`)
+			
+			// Log what's in localStorage for debugging
+			localLessons.forEach((lesson, idx) => {
+				console.log(`[FixLessons] Local lesson ${idx + 1} (${lesson.id}):`, {
+					title: lesson.title,
+					subtitle: lesson.subtitle || '(empty)',
+					description: lesson.description || '(empty)',
+					topic: (lesson as any).topic || '(empty)',
+					category: lesson.category || '(empty)'
+				})
+			})
 
 			if (localLessons.length === 0) {
 				onShowToast?.('No lessons found in localStorage to fix.', 'info')
@@ -225,10 +236,10 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				return
 			}
 
-			// Get all lessons from Supabase
+			// Get all lessons from Supabase with all fields to see what's wrong
 			const { data: supabaseLessons, error: fetchError } = await supabase
 				.from('lessons')
-				.select('custom_id, id')
+				.select('custom_id, id, title, subtitle, description, topic, category, difficulty')
 
 			if (fetchError) {
 				console.error('Error fetching Supabase lessons:', fetchError)
@@ -238,6 +249,18 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			}
 
 			console.log(`[FixLessons] Found ${supabaseLessons?.length || 0} lessons in Supabase`)
+			
+			// Log what's in Supabase for debugging
+			supabaseLessons?.forEach((lesson, idx) => {
+				console.log(`[FixLessons] Supabase lesson ${idx + 1} (${lesson.custom_id || lesson.id}):`, {
+					title: lesson.title || '(empty)',
+					subtitle: lesson.subtitle || '(empty)',
+					description: lesson.description || '(empty)',
+					topic: lesson.topic || '(empty)',
+					category: lesson.category || '(empty)',
+					difficulty: lesson.difficulty || '(empty)'
+				})
+			})
 
 			// Create a map of local lessons by ID
 			const localLessonsById = new Map(localLessons.map(l => [l.id, l]))
@@ -245,6 +268,7 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			// Update each Supabase lesson with correct data from localStorage
 			let fixedCount = 0
 			let skippedCount = 0
+			let errorCount = 0
 
 			for (const supabaseLesson of (supabaseLessons || [])) {
 				const customId = supabaseLesson.custom_id || supabaseLesson.id
@@ -272,23 +296,32 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				}
 
 				console.log(`[FixLessons] Updating lesson ${customId}:`, {
-					subtitle: updateData.subtitle || '(empty)',
-					description: updateData.description || '(empty)',
-					topic: updateData.topic || '(empty)',
-					difficulty: updateData.difficulty
+					from: {
+						subtitle: supabaseLesson.subtitle || '(empty)',
+						description: supabaseLesson.description || '(empty)',
+						topic: supabaseLesson.topic || '(empty)',
+						difficulty: supabaseLesson.difficulty || '(empty)'
+					},
+					to: {
+						subtitle: updateData.subtitle || '(empty)',
+						description: updateData.description || '(empty)',
+						topic: updateData.topic || '(empty)',
+						difficulty: updateData.difficulty
+					}
 				})
 
 				// Update in Supabase using custom_id
-				const { error: updateError } = await supabase
+				const { error: updateError, data: updateResult } = await supabase
 					.from('lessons')
 					.update(updateData)
 					.eq('custom_id', customId)
 
 				if (updateError) {
 					console.error(`[FixLessons] Error updating lesson ${customId}:`, updateError)
+					errorCount++
 				} else {
 					fixedCount++
-					console.log(`[FixLessons] Fixed lesson ${customId}`)
+					console.log(`[FixLessons] ✅ Fixed lesson ${customId}`, updateResult)
 				}
 			}
 
@@ -299,7 +332,11 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			await loadLessonsData()
 			onSuccess()
 
-			onShowToast?.(`Fixed ${fixedCount} lesson(s). ${skippedCount > 0 ? `${skippedCount} skipped.` : ''}`, 'success')
+			if (errorCount > 0) {
+				onShowToast?.(`Fixed ${fixedCount} lesson(s). ${errorCount} failed. ${skippedCount > 0 ? `${skippedCount} skipped.` : ''} Check console for details.`, 'error')
+			} else {
+				onShowToast?.(`Fixed ${fixedCount} lesson(s). ${skippedCount > 0 ? `${skippedCount} skipped.` : ''}`, 'success')
+			}
 		} catch (error) {
 			console.error('Error fixing lessons data:', error)
 			onShowToast?.('Failed to fix lessons data. Please try again.', 'error')
