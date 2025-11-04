@@ -532,14 +532,20 @@ class LocalLessonsService implements LessonsService {
 		const { loadLessonProgress } = await import('./lessonProgressService')
 		const progress = await loadLessonProgress()
 		
-		// Sort lessons by their lesson number
-		const sortedLessons = [...lessons].sort((a, b) => {
+		// Lessons from Supabase are already sorted by lesson_number ascending
+		// But we should sort by custom_id to ensure consistent ordering
+		// Always sort by custom_id number extracted from ID (lesson-1, lesson-2, etc.)
+		let sortedLessons = lessons
+		if (lessons.length > 0) {
 			const getLessonNumber = (id: string): number => {
 				const match = id.match(/lesson-(\d+)/)
 				return match ? parseInt(match[1], 10) : Infinity
 			}
-			return getLessonNumber(a.id) - getLessonNumber(b.id)
-		})
+			// Always sort by custom_id number to ensure correct order
+			sortedLessons = [...lessons].sort((a, b) => {
+				return getLessonNumber(a.id) - getLessonNumber(b.id)
+			})
+		}
 		
 		// Update all lesson titles to match their position, then save
 		// Make sure to preserve ALL fields including description
@@ -551,7 +557,7 @@ class LocalLessonsService implements LessonsService {
 			description: lesson.description || '' // Preserve description
 		}))
 		
-		// Save updated titles if any changed (this will sync to Supabase via saveLessons)
+		// Only save if titles changed (this will sync to Supabase via saveLessons)
 		const titlesChanged = sortedLessons.some((lesson, index) => lesson.title !== `Lesson ${index + 1}`)
 		if (titlesChanged) {
 			await this.saveLessons(updatedLessons)
