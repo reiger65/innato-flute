@@ -149,6 +149,9 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 				addCategory(finalTopic)
 			}
 			
+			// Wait a bit for Supabase to update before reloading
+			await new Promise(resolve => setTimeout(resolve, 500))
+			
 			await loadLessonsData()
 			setEditingLesson(null)
 			onSuccess()
