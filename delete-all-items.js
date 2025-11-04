@@ -42,3 +42,4 @@ async function deleteAllProgressions() {
 	window.location.reload()
 })()
 
+

@@ -244,30 +244,33 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 				}
 
 				if (chord.chordId !== null) {
-					// Play each beat separately to show progress
-					const beatStartIndex = (i === startIndex && startBeatIndex > 0) ? startBeatIndex : 0
-					for (let beat = beatStartIndex; beat < chord.beats; beat++) {
-						if (!isPlayingRef.current || isPausedRef.current) break
-						
-						setPlayingDotIndex(beat)
-						
-						// Play the chord with the correct duration
-						const chordDuration = beatDurationSeconds * chord.beats
-						
-						const notes = getNotesFromOpenStates(chord.openStates, fluteType)
-						simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration)
-						
-						// Wait for one beat duration
-						await new Promise(resolve => setTimeout(resolve, beatDurationMs))
+					// Check if this is the last chord
+					const isLastChord = i === chords.length - 1
+					
+					// Calculate duration based on number of beats
+					// Add extra duration to the last chord (1 extra beat)
+					let chordDuration = beatDurationSeconds * chord.beats
+					if (isLastChord) {
+						chordDuration += beatDurationSeconds // Add one extra beat for the last note
 					}
-				} else {
-					// For rests, wait for all beats
-					const beatStartIndex = (i === startIndex && startBeatIndex > 0) ? startBeatIndex : 0
-					for (let beat = beatStartIndex; beat < chord.beats; beat++) {
-						if (!isPlayingRef.current || isPausedRef.current) break
-						setPlayingDotIndex(beat)
-						await new Promise(resolve => setTimeout(resolve, beatDurationMs))
+					
+					// Play the chord once with the correct duration (like ComposerView)
+					const notes = getNotesFromOpenStates(chord.openStates, fluteType)
+					simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration)
+				}
+				// For rests, just wait
+
+				// Animate through each dot for this chord
+				const beatStartIndex = (i === startIndex && startBeatIndex > 0) ? startBeatIndex : 0
+				for (let beat = beatStartIndex; beat < chord.beats; beat++) {
+					if (!isPlayingRef.current || isPausedRef.current) {
+						// Stop all sounds if playback was interrupted or paused
+						simplePlayer.stopAll()
+						break
 					}
+					
+					setPlayingDotIndex(beat)
+					await new Promise(resolve => setTimeout(resolve, beatDurationMs))
 				}
 
 				setPlayingDotIndex(null)

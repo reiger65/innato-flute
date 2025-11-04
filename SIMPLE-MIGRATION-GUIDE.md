@@ -27,3 +27,4 @@ CREATE INDEX IF NOT EXISTS idx_lessons_user_id ON lessons(created_by) WHERE crea
 ## Step 4: Done!
 Refresh your app - the errors should be gone!
 
+

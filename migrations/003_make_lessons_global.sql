@@ -37,3 +37,4 @@ ALTER TABLE lessons DROP CONSTRAINT IF EXISTS unique_lesson_number;
 -- Already nullable, but ensure it's clear
 COMMENT ON COLUMN lessons.created_by IS 'Admin who created the lesson. Lessons are global and visible to all users.';
 
+

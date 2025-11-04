@@ -223,16 +223,28 @@ class SimpleAudioPlayer {
 			// Create envelope for smooth attack and release
 			const now = this.audioContext!.currentTime;
 			
-			// Attack: faster fade in for more immediate response (0.05 seconds)
+			// Calculate envelope times based on duration for smoother playback
+			// For very short durations, use shorter envelope times to prevent clicks
+			const attackTime = Math.min(0.03, duration * 0.1); // Max 30ms attack, or 10% of duration
+			const releaseTime = Math.min(0.1, duration * 0.2); // Max 100ms release, or 20% of duration
+			const sustainStart = now + attackTime;
+			const releaseStart = now + duration - releaseTime;
+			
+			// Attack: smooth fade in
 			noteGain.gain.setValueAtTime(0, now);
-			noteGain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+			noteGain.gain.linearRampToValueAtTime(0.2, sustainStart);
 			
 			// Sustain: hold for most of the duration
-			noteGain.gain.setValueAtTime(0.2, now + 0.05);
+			noteGain.gain.setValueAtTime(0.2, sustainStart);
 			
-			// Release: shorter fade out for smoother transitions (0.15 seconds)
-			noteGain.gain.setValueAtTime(0.2, now + duration - 0.15);
-			noteGain.gain.linearRampToValueAtTime(0, now + duration);
+			// Release: smooth fade out (only if duration is long enough)
+			if (duration > attackTime + releaseTime) {
+				noteGain.gain.setValueAtTime(0.2, releaseStart);
+				noteGain.gain.linearRampToValueAtTime(0, now + duration);
+			} else {
+				// For very short durations, just fade out from sustain
+				noteGain.gain.linearRampToValueAtTime(0, now + duration);
+			}
 
 			// Connect oscillator -> gain -> master gain -> destination
 			oscillator.connect(noteGain);

@@ -18,3 +18,4 @@ CREATE INDEX IF NOT EXISTS idx_lessons_user_id ON lessons(created_by) WHERE crea
 
 Click "Run" button. Done!
 
+

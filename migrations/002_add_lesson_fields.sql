@@ -12,3 +12,4 @@ CREATE INDEX IF NOT EXISTS idx_lessons_custom_id ON lessons(custom_id) WHERE cus
 -- Create index for user_id lookups
 CREATE INDEX IF NOT EXISTS idx_lessons_user_id ON lessons(created_by) WHERE created_by IS NOT NULL;
 
+

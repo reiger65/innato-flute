@@ -143,3 +143,4 @@ console.log('   1. Refresh your app')
 console.log('   2. Check Manage Lessons modal')
 console.log('   3. Verify lessons sync to Supabase')
 
+

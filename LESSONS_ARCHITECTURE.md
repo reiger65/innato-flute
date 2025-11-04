@@ -92,3 +92,4 @@ await saveLessonProgress(lessonId, completed) // User-specific
 4. **Admin control**: Only admins can modify lesson content
 5. **Scalable**: Lessons stored once, progress stored per-user
 
+

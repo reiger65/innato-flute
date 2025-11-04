@@ -50,3 +50,4 @@ echo "   Je data synchroniseert nu tussen alle devices!"
 
 
 
+

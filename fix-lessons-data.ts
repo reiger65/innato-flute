@@ -137,3 +137,4 @@ async function fixExistingLessonsInSupabase() {
 
 console.log('✅ Fix script loaded! Run: fixExistingLessonsInSupabase()')
 
+

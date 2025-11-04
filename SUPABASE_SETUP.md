@@ -81,3 +81,4 @@ De RLS policies staan ook in `SUPABASE_SCHEMA.sql`. Deze zorgen ervoor dat:
 
 
 
+
