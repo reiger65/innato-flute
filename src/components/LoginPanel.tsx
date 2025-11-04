@@ -152,12 +152,23 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 		const result = await signUp(email, password, username)
 		setLoading(false)
 
-		if (result.success && result.user) {
-			setCurrentUser(result.user)
-			onAuthChange(result.user)
-			setEmail('')
-			setPassword('')
-			setUsername('')
+		if (result.success) {
+			if (result.user) {
+				// User created and logged in immediately (no email confirmation required)
+				setCurrentUser(result.user)
+				onAuthChange(result.user)
+				setEmail('')
+				setPassword('')
+				setUsername('')
+			} else {
+				// User created but email confirmation required
+				setError('Account created! Please check your email to confirm your account before logging in.')
+				// Switch to login view after a delay
+				setTimeout(() => {
+					switchMode('login')
+					setError('')
+				}, 3000)
+			}
 		} else {
 			setError(result.error || 'Failed to create account')
 		}

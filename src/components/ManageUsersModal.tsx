@@ -81,6 +81,7 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 			if (userIds.size === 0) {
 				setUsers([])
 				setLoading(false)
+				onShowToast?.('No users found. Users will appear here once they create compositions or progressions.', 'info')
 				return
 			}
 
