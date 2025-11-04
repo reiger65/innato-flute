@@ -1264,7 +1264,9 @@ export default function App() {
 
 							{/* Lessons Timeline (horizontal scroll) */}
 							<div className="lessons-timeline">
-								{lessons.map((lesson) => {
+								{lessons.filter((lesson, index, self) => 
+									index === self.findIndex(l => l.id === lesson.id)
+								).map((lesson) => {
 									return (
 										<div
 											key={lesson.id}

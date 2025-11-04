@@ -342,6 +342,12 @@ class LocalLessonsService implements LessonsService {
 						.insert(insertData)
 					
 					if (error) {
+						// If custom_id column doesn't exist (error code PGRST204), silently fall back to localStorage
+						// This happens when the migration hasn't been run yet
+						if (error.code === 'PGRST204' && error.message?.includes('custom_id')) {
+							localSaveLessons(lessons)
+							return
+						}
 						console.warn('[lessonsService] Supabase error saving lessons, falling back to localStorage:', error)
 						localSaveLessons(lessons)
 						return

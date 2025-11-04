@@ -36,6 +36,12 @@ export async function loadLessonProgress(): Promise<Record<string, boolean>> {
 				.eq('user_id', session.user.id)
 			
 			if (error) {
+				// If custom_id column doesn't exist (error code 42703 or PGRST204), silently fall back to localStorage
+				// This happens when the migration hasn't been run yet
+				if ((error.code === '42703' || error.code === 'PGRST204') && 
+				    (error.message?.includes('custom_id') || error.message?.includes('Could not find'))) {
+					return localLoadProgress()
+				}
 				console.warn('[lessonProgressService] Supabase error, falling back to localStorage:', error)
 				return localLoadProgress()
 			}
@@ -97,6 +103,12 @@ export async function saveLessonProgress(lessonId: string, completed: boolean): 
 				.single()
 			
 			if (lessonError || !lessonData) {
+				// If custom_id column doesn't exist (error code 42703 or PGRST204), silently skip Supabase save
+				// This happens when the migration hasn't been run yet
+				if ((lessonError?.code === '42703' || lessonError?.code === 'PGRST204') && 
+				    (lessonError.message?.includes('custom_id') || lessonError.message?.includes('Could not find'))) {
+					return
+				}
 				console.warn(`[lessonProgressService] Could not find lesson ${lessonId} in Supabase:`, lessonError)
 				return
 			}
