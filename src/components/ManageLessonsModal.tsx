@@ -4,6 +4,7 @@ import { getComposition } from '../lib/compositionService'
 import { getCurrentUser, isAdmin } from '../lib/authService'
 import { loadLessons as localLoadLessons } from '../lib/lessonsData'
 import { getSupabaseClient } from '../lib/supabaseClient'
+import { loadCategories, addCategory } from '../lib/categoriesService'
 
 interface ManageLessonsModalProps {
 	isOpen: boolean
@@ -19,6 +20,9 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	const [editTitle, setEditTitle] = useState('')
 	const [editSubtitle, setEditSubtitle] = useState('')
 	const [editTopic, setEditTopic] = useState('')
+	const [showCustomTopicInput, setShowCustomTopicInput] = useState(false)
+	const [customTopic, setCustomTopic] = useState('')
+	const [categorySuggestions, setCategorySuggestions] = useState<string[]>([])
 	const [editDescription, setEditDescription] = useState('')
 	const [editCategory, setEditCategory] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
 	const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
@@ -27,6 +31,15 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	useEffect(() => {
 		if (isOpen) {
 			loadLessonsData()
+			
+			// Load category suggestions and initialize defaults if empty
+			let suggestions = loadCategories()
+			if (suggestions.length === 0) {
+				const defaults = ['Introduction', 'Progressions', 'Melodies', 'Compositions']
+				defaults.forEach(cat => addCategory(cat))
+				suggestions = defaults
+			}
+			setCategorySuggestions(suggestions)
 		}
 	}, [isOpen])
 
@@ -102,16 +115,20 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 
 	const handleEdit = (lesson: Lesson) => {
 		setEditingLesson(lesson)
-		// Don't allow editing title - it's auto-generated based on position
-		setEditTitle(lesson.title) // Show current title but it won't be editable
+		setEditTitle(lesson.title)
 		setEditSubtitle(lesson.subtitle || '')
 		setEditTopic((lesson as any).topic || '')
+		setShowCustomTopicInput(false)
+		setCustomTopic('')
 		setEditDescription(lesson.description)
 		setEditCategory(lesson.category)
 	}
 
 	const handleSaveEdit = async () => {
 		if (!editingLesson) return
+
+		// Use custom topic if "Add new..." was selected, otherwise use selected topic
+		const finalTopic = showCustomTopicInput ? customTopic.trim() : editTopic.trim()
 
 		setLoading(true)
 		try {
@@ -123,10 +140,16 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 			await updateLesson(editingLesson.id, {
 				title: autoTitle, // Always use auto-generated title
 				subtitle: editSubtitle.trim(),
-				topic: editTopic.trim(),
+				topic: finalTopic,
 				description: editDescription.trim(),
 				category: editCategory
 			})
+			
+			// Persist new category if provided
+			if (finalTopic) {
+				addCategory(finalTopic)
+			}
+			
 			await loadLessonsData()
 			setEditingLesson(null)
 			onSuccess()
@@ -142,8 +165,23 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 		setEditingLesson(null)
 		setEditTitle('')
 		setEditSubtitle('')
+		setEditTopic('')
+		setShowCustomTopicInput(false)
+		setCustomTopic('')
 		setEditDescription('')
 		setEditCategory('beginner')
+	}
+
+	const handleTopicChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+		const value = e.target.value
+		if (value === '__add_new__') {
+			setShowCustomTopicInput(true)
+			setEditTopic('')
+		} else {
+			setShowCustomTopicInput(false)
+			setEditTopic(value)
+			setCustomTopic('')
+		}
 	}
 
 	const handleDelete = async (lessonId: string, lessonTitle: string) => {
@@ -568,18 +606,49 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 													placeholder="e.g., Major Scales, Basic Progressions"
 												/>
 											</div>
-						<div>
-							<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
-								Category (topic)
-							</label>
-							<input
-								type="text"
-								value={editTopic}
-								onChange={(e) => setEditTopic(e.target.value)}
-								className="modal-input"
-								placeholder="e.g., Progressions, Melodies, Rhythm"
-							/>
-						</div>
+											<div>
+												<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
+													Category (topic)
+												</label>
+												{!showCustomTopicInput ? (
+													<select
+														value={editTopic}
+														onChange={handleTopicChange}
+														className="modal-input"
+														style={{ width: '100%' }}
+													>
+														<option value="">Select a category...</option>
+														{categorySuggestions.map((c) => (
+															<option key={c} value={c}>{c}</option>
+														))}
+														<option value="__add_new__">➕ Add new category...</option>
+													</select>
+												) : (
+													<div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+														<input
+															type="text"
+															value={customTopic}
+															onChange={(e) => setCustomTopic(e.target.value)}
+															className="modal-input"
+															placeholder="Enter new category name"
+															autoFocus
+															style={{ flex: 1 }}
+														/>
+														<button
+															type="button"
+															className="btn-sm"
+															onClick={() => {
+																setShowCustomTopicInput(false)
+																setCustomTopic('')
+																setEditTopic('')
+															}}
+															style={{ flexShrink: 0 }}
+														>
+															Cancel
+														</button>
+													</div>
+												)}
+											</div>
 											<div>
 												<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
 													Description
