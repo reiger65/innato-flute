@@ -237,7 +237,7 @@ class LocalLessonsService implements LessonsService {
 													id: customId,
 													title: `Lesson ${lessonNum}`, // Always generate title from custom_id number
 													subtitle: item.subtitle || '',
-													topic: item.topic || item.category || '',
+													topic: item.topic || '', // Only use topic field, don't fallback to category
 													description: item.description || '',
 													category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
 													compositionId: item.composition_id,
