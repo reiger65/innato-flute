@@ -106,10 +106,10 @@ export async function syncLocalLessonsToSupabase(): Promise<number> {
 						lesson_number: lessonNumber,
 						title: local.title,
 						description: local.description || null, // Make sure description is synced
-						difficulty: local.category, // Map category to difficulty
-						category: (local as any).topic || null, // Map topic to category field
+						difficulty: local.category, // Map category to difficulty (beginner/intermediate/advanced)
+						category: null, // Don't use category field - use topic instead
 						subtitle: local.subtitle || null, // Make sure subtitle is synced
-						topic: (local as any).topic || null, // Make sure topic is synced
+						topic: (local as any).topic || null, // Make sure topic is synced (Progressions, Melodies, etc.)
 						custom_id: local.id // Store the custom ID like "lesson-1"
 					})
 				
@@ -168,7 +168,7 @@ class LocalLessonsService implements LessonsService {
 						id: customId,
 						title: `Lesson ${lessonNum}`, // Always generate title from custom_id number, ignore Supabase title
 						subtitle: item.subtitle || '',
-						topic: item.topic || item.category || '', // Use topic field, fallback to category
+						topic: item.topic || '', // Only use topic field, don't fallback to category
 						description: item.description || '', // Preserve description
 						category: (item.difficulty || 'beginner') as 'beginner' | 'intermediate' | 'advanced',
 						compositionId: item.composition_id,
@@ -322,18 +322,18 @@ class LocalLessonsService implements LessonsService {
 					const match = lesson.id.match(/lesson-(\d+)/)
 					const lessonNumber = match ? parseInt(match[1], 10) : lessons.indexOf(lesson) + 1
 					
-					return {
-						created_by: session.user.id,
-						composition_id: lesson.compositionId || null,
-						lesson_number: lessonNumber,
-						title: lesson.title,
-						description: lesson.description || null,
-						difficulty: lesson.category,
-						category: (lesson as any).topic || null,
-						subtitle: lesson.subtitle || null,
-						topic: (lesson as any).topic || null,
-						custom_id: lesson.id
-					}
+				return {
+					created_by: session.user.id,
+					composition_id: lesson.compositionId || null,
+					lesson_number: lessonNumber,
+					title: lesson.title,
+					description: lesson.description || null,
+					difficulty: lesson.category, // beginner/intermediate/advanced
+					category: null, // Don't use category field - use topic instead
+					subtitle: lesson.subtitle || null,
+					topic: (lesson as any).topic || null, // Topic/category like "Progressions", "Melodies", etc.
+					custom_id: lesson.id
+				}
 				})
 				
 				if (insertData.length > 0) {
