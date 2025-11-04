@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import type { User } from '../lib/authService'
-import { signUp, signIn, signInWithMagicLink, signOut, getCurrentUser } from '../lib/authService'
+import { signUp, signIn, signInWithMagicLink, resetPassword, signOut, getCurrentUser } from '../lib/authService'
 
 interface LoginPanelProps {
 	onClose: () => void
 	onAuthChange: (user: User | null) => void
 }
 
-type ViewMode = 'login' | 'signup' | 'magiclink'
+type ViewMode = 'login' | 'signup' | 'magiclink' | 'resetpassword'
 
 export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 	const [viewMode, setViewMode] = useState<ViewMode>('login')
@@ -17,6 +17,8 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 	const [error, setError] = useState('')
 	const [loading, setLoading] = useState(false)
 	const [magicLinkSent, setMagicLinkSent] = useState(false)
+	const [passwordResetSent, setPasswordResetSent] = useState(false)
+	const [showPassword, setShowPassword] = useState(false)
 	const [currentUser, setCurrentUser] = useState<User | null>(null)
 
 	// Check for existing session on mount
@@ -130,6 +132,27 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		}
 	}
 
+	const handlePasswordReset = async (e: React.FormEvent) => {
+		e.preventDefault()
+		setError('')
+		setLoading(true)
+
+		if (!email) {
+			setError('Please enter your email address')
+			setLoading(false)
+			return
+		}
+
+		const result = await resetPassword(email)
+		setLoading(false)
+
+		if (result.success) {
+			setPasswordResetSent(true)
+		} else {
+			setError(result.error || 'Failed to send password reset email')
+		}
+	}
+
 	const handleSignOut = async () => {
 		await signOut()
 		setCurrentUser(null)
@@ -143,6 +166,8 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 		setPassword('')
 		setUsername('')
 		setMagicLinkSent(false)
+		setPasswordResetSent(false)
+		setShowPassword(false)
 	}
 
 	return (
@@ -241,6 +266,47 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 								Back to login
 							</button>
 						</div>
+					) : passwordResetSent ? (
+						// Password reset sent confirmation
+						<div style={{ textAlign: 'center', padding: 'var(--space-6) 0' }}>
+							<div style={{ 
+								marginBottom: 'var(--space-4)',
+								width: '64px',
+								height: '64px',
+								margin: '0 auto var(--space-4)',
+								borderRadius: '50%',
+								background: 'var(--color-black)',
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								color: 'var(--color-white)'
+							}}>
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
+									<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+									<polyline points="22,6 12,13 2,6"></polyline>
+								</svg>
+							</div>
+							<h3 style={{ 
+								fontSize: 'var(--font-size-lg)', 
+								fontWeight: 'var(--font-weight-bold)',
+								marginBottom: 'var(--space-2)'
+							}}>Check your email</h3>
+							<p style={{ 
+								fontSize: 'var(--font-size-sm)', 
+								color: 'rgba(0, 0, 0, 0.7)',
+								marginBottom: 'var(--space-4)',
+								lineHeight: 1.6
+							}}>
+								We've sent a password reset link to <strong>{email}</strong>. Click the link in the email to set a new password.
+							</p>
+							<button
+								className="btn-sm"
+								onClick={() => switchMode('login')}
+								style={{ width: '100%' }}
+							>
+								Back to login
+							</button>
+						</div>
 					) : (
 						// Login/Signup/Magic Link view
 						<div>
@@ -279,6 +345,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 							{/* Form */}
 							<form onSubmit={
 								viewMode === 'magiclink' ? handleMagicLink :
+								viewMode === 'resetpassword' ? handlePasswordReset :
 								viewMode === 'login' ? handleSignIn : handleSignUp
 							}>
 								{viewMode === 'signup' && (
@@ -327,7 +394,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 									/>
 								</div>
 
-								{viewMode !== 'magiclink' && (
+								{viewMode !== 'magiclink' && viewMode !== 'resetpassword' && (
 									<div style={{ marginBottom: 'var(--space-4)' }}>
 										<label style={{ 
 											display: 'block', 
@@ -340,16 +407,58 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 										}}>
 											Password
 										</label>
-										<input
-											type="password"
-											value={password}
-											onChange={(e) => setPassword(e.target.value)}
-											placeholder="••••••••"
-											required
-											minLength={6}
-											className="modal-input"
-											autoComplete={viewMode === 'signup' ? 'new-password' : 'current-password'}
-										/>
+										<div style={{ position: 'relative' }}>
+											<input
+												type={showPassword ? 'text' : 'password'}
+												value={password}
+												onChange={(e) => setPassword(e.target.value)}
+												placeholder="••••••••"
+												required
+												minLength={6}
+												className="modal-input"
+												autoComplete={viewMode === 'signup' ? 'new-password' : 'current-password'}
+												style={{ paddingRight: '40px' }}
+											/>
+											<button
+												type="button"
+												onClick={() => setShowPassword(!showPassword)}
+												style={{
+													position: 'absolute',
+													right: '8px',
+													top: '50%',
+													transform: 'translateY(-50%)',
+													background: 'none',
+													border: 'none',
+													cursor: 'pointer',
+													padding: '4px',
+													display: 'flex',
+													alignItems: 'center',
+													justifyContent: 'center',
+													color: 'rgba(0, 0, 0, 0.5)',
+													transition: 'color 0.2s ease'
+												}}
+												onMouseEnter={(e) => {
+													e.currentTarget.style.color = 'rgba(0, 0, 0, 0.8)'
+												}}
+												onMouseLeave={(e) => {
+													e.currentTarget.style.color = 'rgba(0, 0, 0, 0.5)'
+												}}
+												aria-label={showPassword ? 'Hide password' : 'Show password'}
+												title={showPassword ? 'Hide password' : 'Show password'}
+											>
+												{showPassword ? (
+													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+														<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+														<line x1="1" y1="1" x2="23" y2="23"></line>
+													</svg>
+												) : (
+													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+														<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+														<circle cx="12" cy="12" r="3"></circle>
+													</svg>
+												)}
+											</button>
+										</div>
 										{viewMode === 'signup' && (
 											<p style={{ 
 												marginTop: 'var(--space-1)', 
@@ -362,7 +471,27 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 									</div>
 								)}
 
-								{viewMode === 'magiclink' && (
+								{viewMode === 'login' && (
+									<div style={{ marginBottom: 'var(--space-3)', textAlign: 'right' }}>
+										<button
+											type="button"
+											onClick={() => switchMode('resetpassword')}
+											style={{
+												background: 'none',
+												border: 'none',
+												color: 'rgba(0, 0, 0, 0.7)',
+												fontSize: 'var(--font-size-xs)',
+												cursor: 'pointer',
+												textDecoration: 'underline',
+												padding: 0
+											}}
+										>
+											Forgot password?
+										</button>
+									</div>
+								)}
+
+								{viewMode === 'resetpassword' && (
 									<div style={{ 
 										marginBottom: 'var(--space-4)',
 										padding: 'var(--space-3)',
@@ -376,7 +505,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 											margin: 0,
 											lineHeight: 1.5
 										}}>
-											✨ No password needed! We'll send you a secure link to sign in.
+											Enter your email address and we'll send you a link to reset your password.
 										</p>
 									</div>
 								)}
@@ -403,6 +532,7 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 								>
 									{loading ? 'Loading...' : 
 									 viewMode === 'magiclink' ? 'Send Magic Link' :
+									 viewMode === 'resetpassword' ? 'Send Reset Link' :
 									 viewMode === 'login' ? 'Sign In' : 'Create Account'}
 								</button>
 
@@ -419,6 +549,23 @@ export function LoginPanel({ onClose, onAuthChange }: LoginPanelProps) {
 											style={{ width: '100%' }}
 										>
 											Use password instead
+										</button>
+									</div>
+								)}
+
+								{viewMode === 'resetpassword' && (
+									<div style={{ 
+										marginTop: 'var(--space-4)',
+										paddingTop: 'var(--space-4)',
+										borderTop: 'var(--border-1) solid rgba(0, 0, 0, 0.2)'
+									}}>
+										<button
+											type="button"
+											className="btn-sm"
+											onClick={() => switchMode('login')}
+											style={{ width: '100%' }}
+										>
+											Back to login
 										</button>
 									</div>
 								)}

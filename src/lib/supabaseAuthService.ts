@@ -166,6 +166,35 @@ export async function signUp(email: string, password: string, username?: string)
 }
 
 /**
+ * Reset password (send password reset email)
+ */
+export async function resetPassword(email: string): Promise<AuthResult> {
+	if (isSupabaseConfigured()) {
+		const supabase = getSupabaseClient()
+		
+		if (supabase) {
+			try {
+				const { error } = await supabase.auth.resetPasswordForEmail(email, {
+					redirectTo: `${window.location.origin}?type=recovery`
+				})
+				
+				if (error) {
+					return { success: false, error: error.message }
+				}
+				
+				// Password reset email sent successfully
+				return { success: true, user: undefined }
+			} catch (error) {
+				console.error('Password reset error:', error)
+				return { success: false, error: 'Failed to send password reset email. Please try again.' }
+			}
+		}
+	}
+	
+	return { success: false, error: 'Password reset not available. Please use magic link login.' }
+}
+
+/**
  * Sign in with magic link (passwordless)
  */
 export async function signInWithMagicLink(email: string): Promise<AuthResult> {

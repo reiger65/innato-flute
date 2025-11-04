@@ -14,6 +14,7 @@ import {
 	signUp as supabaseSignUp,
 	signIn as supabaseSignIn,
 	signInWithMagicLink as supabaseSignInWithMagicLink,
+	resetPassword as supabaseResetPassword,
 	signOut as supabaseSignOut,
 	isAdmin as supabaseIsAdmin
 } from './supabaseAuthService'
@@ -107,6 +108,17 @@ export async function signInWithMagicLink(email: string): Promise<AuthResult> {
 		return await supabaseSignInWithMagicLink(email)
 	}
 	return { success: false, error: 'Magic link not available. Please use password login.' }
+}
+
+/**
+ * Reset password (send password reset email)
+ * Uses Supabase when available
+ */
+export async function resetPassword(email: string): Promise<AuthResult> {
+	if (isSupabaseConfigured()) {
+		return await supabaseResetPassword(email)
+	}
+	return { success: false, error: 'Password reset not available. Please use magic link login.' }
 }
 
 /**
