@@ -124,10 +124,24 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 	}
 
 		const handleSaveEdit = async () => {
-		if (!editingLesson) return
+		if (!editingLesson) {
+			console.error('[ManageLessonsModal] No lesson being edited!')
+			return
+		}
 
 		// Use custom topic if "Add new..." was selected, otherwise use selected topic
 		const finalTopic = showCustomTopicInput ? customTopic.trim() : editTopic.trim()
+
+		console.log('[ManageLessonsModal] handleSaveEdit called')
+		console.log('[ManageLessonsModal] Editing lesson:', editingLesson.id)
+		console.log('[ManageLessonsModal] Form values:', {
+			editTitle,
+			editSubtitle,
+			editDescription,
+			editTopic,
+			finalTopic,
+			editCategory
+		})
 
 		setLoading(true)
 		try {

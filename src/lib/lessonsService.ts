@@ -390,27 +390,42 @@ class LocalLessonsService implements LessonsService {
 	}
 
 	async updateLesson(lessonId: string, updates: Partial<Lesson>): Promise<boolean> {
+		console.log(`[lessonsService] updateLesson called for ${lessonId}:`, updates)
+		
 		// Only admins can update lessons (lessons are global)
 		// Update local first
 		const localResult = localUpdateLesson(lessonId, updates)
+		console.log(`[lessonsService] Local update result:`, localResult)
 		
 		if (isSupabaseConfigured()) {
+			console.log('[lessonsService] Supabase is configured, attempting Supabase update...')
 			try {
 				const supabase = getSupabaseClient()
-				if (!supabase) return localResult
-				
+				if (!supabase) {
+					console.warn('[lessonsService] No Supabase client, returning local result')
+					return localResult
+				}
+
 				const user = getCurrentUser()
-				if (!user) return localResult
-				
+				if (!user) {
+					console.warn('[lessonsService] No user, returning local result')
+					return localResult
+				}
+
 				const { data: { session } } = await supabase.auth.getSession()
-				if (!session?.user?.id) return localResult
-				
+				if (!session?.user?.id) {
+					console.warn('[lessonsService] No session, returning local result')
+					return localResult
+				}
+
 				// Admin check - only admins can update global lessons
 				const { isAdmin } = await import('./authService')
 				if (!isAdmin(user)) {
 					console.warn('[lessonsService] Non-admin user attempted to update lesson')
 					return localResult
 				}
+				
+				console.log('[lessonsService] Admin check passed, proceeding with Supabase update...')
 				
 				// Update in Supabase using custom_id (lessons are global, no user filter needed)
 				const updateData: any = {}
@@ -563,7 +578,10 @@ class LocalLessonsService implements LessonsService {
 				}
 			} catch (error) {
 				console.error('[lessonsService] Error updating lesson in Supabase:', error)
+				console.error('[lessonsService] Error details:', JSON.stringify(error, null, 2))
 			}
+		} else {
+			console.log('[lessonsService] Supabase not configured, using localStorage only')
 		}
 		
 		return localResult
