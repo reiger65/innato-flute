@@ -152,6 +152,8 @@ class LocalLessonsService implements LessonsService {
 				const deletedIdsKey = 'deleted-lesson-ids'
 				const deletedIds = new Set<string>(JSON.parse(localStorage.getItem(deletedIdsKey) || '[]'))
 				
+				console.log(`[lessonsService] Checking deleted lesson IDs:`, Array.from(deletedIds))
+				
 				const { data, error } = await supabase
 					.from('lessons')
 					.select('*')
@@ -162,12 +164,18 @@ class LocalLessonsService implements LessonsService {
 					return localLoadLessons()
 				}
 				
+				console.log(`[lessonsService] Loaded ${data?.length || 0} lessons from Supabase before filtering`)
+				
 				// Transform Supabase data to Lesson format
 				const supabaseLessons = (data || [])
 					.filter(item => {
 						// Filter out deleted lessons
 						const customId = item.custom_id || `lesson-${item.lesson_number}`
-						return !deletedIds.has(customId)
+						const isDeleted = deletedIds.has(customId)
+						if (isDeleted) {
+							console.log(`[lessonsService] Filtering out deleted lesson: ${customId} (${item.title || 'no title'})`)
+						}
+						return !isDeleted
 					})
 					.map(item => {
 						// Extract lesson number from custom_id or lesson_number
