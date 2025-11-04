@@ -657,13 +657,18 @@ export function ManageLessonsModal({ isOpen, onClose, onSuccess, onShowToast }: 
 													value={editDescription}
 													onChange={(e) => setEditDescription(e.target.value)}
 													className="modal-input"
-													rows={2}
-													style={{ resize: 'vertical', minHeight: '50px' }}
+													rows={3}
+													placeholder="Enter lesson description"
+													style={{ 
+														resize: 'vertical', 
+														minHeight: '60px',
+														width: '100%'
+													}}
 												/>
 											</div>
 											<div>
 												<label style={{ display: 'block', marginBottom: 'var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}>
-													Difficulty
+													Difficulty Level
 												</label>
 												<select
 													value={editCategory}
