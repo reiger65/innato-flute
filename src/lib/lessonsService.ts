@@ -233,9 +233,10 @@ class LocalLessonsService implements LessonsService {
 											sessionStorage.setItem(syncKey, 'true')
 											const reloadedLessons = (reloadData || []).map(item => {
 												const customId = item.custom_id || `lesson-${item.lesson_number}`
+												const lessonNum = customId.match(/lesson-(\d+)/)?.[1] ? parseInt(customId.match(/lesson-(\d+)/)![1], 10) : item.lesson_number
 												return {
 													id: customId,
-													title: item.title || `Lesson ${item.lesson_number}`,
+													title: `Lesson ${lessonNum}`, // Always generate title from custom_id number
 													subtitle: item.subtitle || '',
 													topic: item.topic || item.category || '',
 													description: item.description || '',
