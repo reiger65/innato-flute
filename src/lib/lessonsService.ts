@@ -434,12 +434,28 @@ class LocalLessonsService implements LessonsService {
 				// Get the current lesson to compare - but don't fail if this query fails
 				let currentLesson = null
 				try {
-					const { data: lessonData } = await supabase
+					// Try by custom_id first
+					const { data: byCustomId } = await supabase
 						.from('lessons')
-						.select('title, lesson_number')
+						.select('id, title, lesson_number, custom_id')
 						.eq('custom_id', lessonId)
 						.single()
-					currentLesson = lessonData
+					
+					if (byCustomId) {
+						currentLesson = byCustomId
+					} else {
+						// Fallback to lesson_number
+						const match = lessonId.match(/lesson-(\d+)/)
+						if (match) {
+							const lessonNumber = parseInt(match[1], 10)
+							const { data: byLessonNumber } = await supabase
+								.from('lessons')
+								.select('id, title, lesson_number, custom_id')
+								.eq('lesson_number', lessonNumber)
+								.single()
+							currentLesson = byLessonNumber
+						}
+					}
 				} catch (queryError) {
 					// Ignore query errors - we'll just skip lesson_number update
 					console.warn('[lessonsService] Could not fetch current lesson for comparison:', queryError)
@@ -466,11 +482,47 @@ class LocalLessonsService implements LessonsService {
 				}
 				
 				// First, verify the lesson exists in Supabase
-				const { data: existingLesson, error: checkError } = await supabase
+				// Handle both cases: custom_id might be null, so try multiple queries
+				let existingLesson = null
+				let checkError = null
+				
+				// Try by custom_id first
+				const { data: byCustomId, error: customIdError } = await supabase
 					.from('lessons')
-					.select('id, custom_id, subtitle, description, topic')
+					.select('id, custom_id, lesson_number, subtitle, description, topic')
 					.eq('custom_id', lessonId)
 					.single()
+				
+				if (!customIdError && byCustomId) {
+					existingLesson = byCustomId
+				} else {
+					// If not found by custom_id, try by lesson_number (extract number from lessonId like "lesson-9" -> 9)
+					const match = lessonId.match(/lesson-(\d+)/)
+					if (match) {
+						const lessonNumber = parseInt(match[1], 10)
+						const { data: byLessonNumber, error: lessonNumberError } = await supabase
+							.from('lessons')
+							.select('id, custom_id, lesson_number, subtitle, description, topic')
+							.eq('lesson_number', lessonNumber)
+							.single()
+						
+						if (!lessonNumberError && byLessonNumber) {
+							existingLesson = byLessonNumber
+							// If custom_id was null, update it now
+							if (!existingLesson.custom_id) {
+								console.log(`[lessonsService] Setting custom_id for lesson ${lessonNumber} to ${lessonId}`)
+								await supabase
+									.from('lessons')
+									.update({ custom_id: lessonId })
+									.eq('id', existingLesson.id)
+							}
+						} else {
+							checkError = lessonNumberError
+						}
+					} else {
+						checkError = customIdError
+					}
+				}
 				
 				if (checkError || !existingLesson) {
 					console.error(`[lessonsService] Lesson ${lessonId} not found in Supabase:`, checkError)
@@ -481,15 +533,17 @@ class LocalLessonsService implements LessonsService {
 				console.log(`[lessonsService] Found lesson in Supabase:`, {
 					id: existingLesson.id,
 					custom_id: existingLesson.custom_id,
+					lesson_number: existingLesson.lesson_number,
 					current_subtitle: existingLesson.subtitle,
 					current_description: existingLesson.description,
 					current_topic: existingLesson.topic
 				})
 				
+				// Update using the Supabase id (most reliable)
 				const { error, data } = await supabase
 					.from('lessons')
 					.update(updateData)
-					.eq('custom_id', lessonId) // Lessons are global, no user filter
+					.eq('id', existingLesson.id) // Use Supabase id instead of custom_id for reliability
 					.select()
 				
 				if (error) {
