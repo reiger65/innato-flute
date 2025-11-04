@@ -90,11 +90,32 @@ function getCurrentUserId(): string {
 }
 
 /**
- * Get current username (fallback to "Anonymous")
+ * Get current username (fallback to email or "Anonymous")
  */
 function getCurrentUsername(): string {
-	// Later: get from user profile
-	// For now: try to get from localAuth
+	// Try to get from Supabase session first
+	if (isSupabaseConfigured()) {
+		try {
+			const supabase = getSupabaseClient()
+			if (supabase) {
+				// Try to get from cached session
+				const user = getCurrentUser()
+				if (user) {
+					if (user.username) {
+						return user.username
+					}
+					if (user.email) {
+						// Use email prefix as username
+						return user.email.split('@')[0]
+					}
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+	
+	// Fallback to localStorage session
 	try {
 		const session = localStorage.getItem('innato-session')
 		if (session) {
@@ -130,19 +151,34 @@ export async function loadSharedProgressions(): Promise<SharedProgression[]> {
 	
 	// Transform function
 	function transformSupabaseProgressions(items: any[]): SharedProgression[] {
-		return items.map(item => ({
-			id: item.id,
-			originalId: item.id,
-			name: item.name,
-			chordIds: item.chord_ids,
-			sharedBy: item.user_id,
-			sharedByUsername: 'Anonymous',
-			sharedAt: new Date(item.created_at).getTime(),
-			isPublic: true,
-			favoriteCount: 0,
-			createdAt: new Date(item.created_at).getTime(),
-			version: item.version || 1
-		}))
+		const currentUser = getCurrentUser()
+		return items.map(item => {
+			// Try to get username - if current user matches, use their username
+			let username = 'Anonymous'
+			if (currentUser && currentUser.id === item.user_id) {
+				username = currentUser.username || currentUser.email?.split('@')[0] || 'Anonymous'
+			} else {
+				// Check localStorage for saved username
+				const localShared = loadLocalSharedProgressions()
+				const localItem = localShared.find(l => l.id === item.id || l.originalId === item.id)
+				if (localItem?.sharedByUsername && localItem.sharedByUsername !== 'Anonymous') {
+					username = localItem.sharedByUsername
+				}
+			}
+			return {
+				id: item.id,
+				originalId: item.id,
+				name: item.name,
+				chordIds: item.chord_ids,
+				sharedBy: item.user_id,
+				sharedByUsername: username,
+				sharedAt: new Date(item.created_at).getTime(),
+				isPublic: true,
+				favoriteCount: 0,
+				createdAt: new Date(item.created_at).getTime(),
+				version: item.version || 1
+			}
+		})
 	}
 	
 	if (isSupabaseConfigured()) {
@@ -415,25 +451,40 @@ export async function loadSharedCompositions(): Promise<SharedComposition[]> {
 	
 	// Transform function (reusable)
 	function transformSupabaseCompositions(items: any[]): SharedComposition[] {
-		return items.map(item => ({
-			id: item.id,
-			originalId: item.id,
-			name: item.name,
-			chords: item.chords as SharedComposition['chords'],
-			tempo: item.tempo,
-			timeSignature: item.time_signature as '3/4' | '4/4',
-			fluteType: 'innato',
-			tuning: '440',
-			sharedBy: item.user_id,
-			sharedByUsername: 'Anonymous',
-			sharedAt: new Date(item.created_at).getTime(),
-			isPublic: true,
-			favoriteCount: 0,
-			isReadOnly: true,
-			createdAt: new Date(item.created_at).getTime(),
-			updatedAt: new Date(item.updated_at).getTime(),
-			version: item.version || 1
-		}))
+		const currentUser = getCurrentUser()
+		return items.map(item => {
+			// Try to get username - if current user matches, use their username
+			let username = 'Anonymous'
+			if (currentUser && currentUser.id === item.user_id) {
+				username = currentUser.username || currentUser.email?.split('@')[0] || 'Anonymous'
+			} else {
+				// Check localStorage for saved username
+				const localShared = loadLocalSharedCompositions()
+				const localItem = localShared.find(l => l.id === item.id || l.originalId === item.id)
+				if (localItem?.sharedByUsername && localItem.sharedByUsername !== 'Anonymous') {
+					username = localItem.sharedByUsername
+				}
+			}
+			return {
+				id: item.id,
+				originalId: item.id,
+				name: item.name,
+				chords: item.chords as SharedComposition['chords'],
+				tempo: item.tempo,
+				timeSignature: item.time_signature as '3/4' | '4/4',
+				fluteType: 'innato',
+				tuning: '440',
+				sharedBy: item.user_id,
+				sharedByUsername: username,
+				sharedAt: new Date(item.created_at).getTime(),
+				isPublic: true,
+				favoriteCount: 0,
+				isReadOnly: true,
+				createdAt: new Date(item.created_at).getTime(),
+				updatedAt: new Date(item.updated_at).getTime(),
+				version: item.version || 1
+			}
+		})
 	}
 	
 	if (isSupabaseConfigured()) {
