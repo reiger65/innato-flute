@@ -53,10 +53,8 @@ export function isAdmin(user: User | null | undefined): boolean {
 	}
 	
 	// Fallback to local check
-	const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
-	const adminUsernames = ['admin', 'hanshoukes']
+	const adminEmails = ['info@stonewhistle.com']
 	return adminEmails.includes(user.email.toLowerCase()) || 
-	       (user.username && adminUsernames.includes(user.username.toLowerCase())) ||
 	       user.role === 'admin'
 }
 

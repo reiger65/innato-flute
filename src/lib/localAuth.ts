@@ -30,10 +30,8 @@ export function signUp(email: string, _password: string, username?: string): { s
 		}
 
 		// Check if this is an admin email
-		const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
-		const adminUsernames = ['admin', 'hanshoukes']
-		const isAdminEmail = adminEmails.includes(email.toLowerCase()) || 
-		                     (username && adminUsernames.includes(username.toLowerCase()))
+		const adminEmails = ['info@stonewhistle.com']
+		const isAdminEmail = adminEmails.includes(email.toLowerCase())
 
 		// Create new user
 		const newUser: User = {
@@ -99,10 +97,8 @@ export async function signIn(email: string, password: string): Promise<{ success
 		}
 
 		// Check if user is admin
-		const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
-		const adminUsernames = ['admin', 'hanshoukes']
-		const isAdminUser = adminEmails.includes(user.email.toLowerCase()) || 
-		                   (user.username && adminUsernames.includes(user.username.toLowerCase())) ||
+		const adminEmails = ['info@stonewhistle.com']
+		const isAdminUser = adminEmails.includes(user.email.toLowerCase()) ||
 		                   user.role === 'admin'
 
 		if (isAdminUser) {

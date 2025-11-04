@@ -23,7 +23,7 @@ export function isAdmin(user: User | null): boolean {
 	if (!user) return false
 	
 	// Strict admin check - only allow specific admin emails
-	const adminEmails = ['admin@innato.com', 'hanshoukes@gmail.com', 'info@stonewhistle.com']
+	const adminEmails = ['info@stonewhistle.com']
 	
 	// If Supabase is configured, check user metadata
 	if (isSupabaseConfigured()) {
@@ -40,9 +40,7 @@ export function isAdmin(user: User | null): boolean {
 	}
 	
 	// Fallback to local check - strict email whitelist
-	const adminUsernames = ['admin', 'hanshoukes']
 	return adminEmails.includes(user.email.toLowerCase()) || 
-	       (user.username && adminUsernames.includes(user.username.toLowerCase())) ||
 	       user.role === 'admin'
 }
 

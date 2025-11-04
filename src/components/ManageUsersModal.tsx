@@ -54,62 +54,121 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 		try {
 			// Note: supabase.auth.admin methods require service role key (server-side only)
 			// In browser, we can only get users from our own tables
-			// Get users from compositions/progressions tables
-			const [compositionsResult, progressionsResult] = await Promise.all([
-				supabase.from('compositions').select('user_id, created_by'),
-				supabase.from('progressions').select('user_id, created_by')
+			// Strategy: Get users from ALL tables that have user_id or created_by fields
+			
+			// Try to get users from profiles table first if it exists
+			let profilesResult: any = null
+			try {
+				profilesResult = await supabase.from('profiles').select('id, email, username, role, created_at')
+			} catch (err) {
+				// Profiles table might not exist, that's okay
+				console.log('[ManageUsersModal] Profiles table not found')
+			}
+
+			// Get users from all tables that might have user references
+			const [compositionsResult, progressionsResult, sharedItemsResult, userProgressResult] = await Promise.all([
+				supabase.from('compositions').select('user_id').limit(1000),
+				supabase.from('progressions').select('user_id').limit(1000),
+				supabase.from('shared_items').select('user_id').limit(1000),
+				supabase.from('user_progress').select('user_id').limit(1000)
 			])
 
+			// Log any errors but don't fail completely
 			if (compositionsResult.error) {
-				console.error('[ManageUsersModal] Error loading compositions:', compositionsResult.error)
+				console.warn('[ManageUsersModal] Error loading compositions:', compositionsResult.error)
 			}
 			if (progressionsResult.error) {
-				console.error('[ManageUsersModal] Error loading progressions:', progressionsResult.error)
+				console.warn('[ManageUsersModal] Error loading progressions:', progressionsResult.error)
+			}
+			if (sharedItemsResult.error) {
+				console.warn('[ManageUsersModal] Error loading shared_items:', sharedItemsResult.error)
+			}
+			if (userProgressResult.error) {
+				console.warn('[ManageUsersModal] Error loading user_progress:', userProgressResult.error)
 			}
 
-			// Get unique user IDs
+			// Get unique user IDs from all sources
 			const userIds = new Set<string>()
+			
+			// Add users from profiles table
+			if (profilesResult?.data) {
+				profilesResult.data.forEach((profile: any) => {
+					if (profile.id) userIds.add(profile.id)
+				})
+			}
+			
+			// Add users from compositions/progressions
 			compositionsResult.data?.forEach(comp => {
 				if (comp.user_id) userIds.add(comp.user_id)
-				if (comp.created_by) userIds.add(comp.created_by)
 			})
 			progressionsResult.data?.forEach(prog => {
 				if (prog.user_id) userIds.add(prog.user_id)
-				if (prog.created_by) userIds.add(prog.created_by)
+			})
+			
+			// Add users from shared_items
+			sharedItemsResult.data?.forEach(item => {
+				if (item.user_id) userIds.add(item.user_id)
+			})
+			
+			// Add users from user_progress
+			userProgressResult.data?.forEach(progress => {
+				if (progress.user_id) userIds.add(progress.user_id)
 			})
 
 			if (userIds.size === 0) {
 				setUsers([])
 				setLoading(false)
-				onShowToast?.('No users found. Users will appear here once they create compositions or progressions.', 'info')
+				onShowToast?.('No users found. Users will appear here once they create content or make progress in lessons.', 'info')
 				return
 			}
 
-			// For each user ID, try to get their email from auth metadata
-			// We can't use admin API from browser, so we'll create a basic user list
-			// from what we can see in the database
+			// Build user list
 			const usersList: UserWithStats[] = []
+			const profilesMap = new Map<string, any>()
+			
+			// Create map from profiles data
+			if (profilesResult?.data) {
+				profilesResult.data.forEach((profile: any) => {
+					if (profile.id) {
+						profilesMap.set(profile.id, profile)
+					}
+				})
+			}
 			
 			// Get current session to see if we can get user info
 			const { data: { session } } = await supabase.auth.getSession()
 			
-			// Try to get user info from profiles table if it exists, or use IDs
+			// Create user objects
 			for (const userId of userIds) {
 				try {
-					// Try to get user info from a profiles table if it exists
-					// Otherwise, create a basic user object
-					const user: UserWithStats = {
-						id: userId,
-						email: userId, // Fallback: use ID as email if we can't get email
-						role: 'user',
-						createdAt: Date.now()
-					}
+					// Try to get user info from profiles table first
+					const profile = profilesMap.get(userId)
 					
-					// If this is the current user, we know their email
-					if (session?.user?.id === userId) {
-						user.email = session.user.email || userId
-						user.username = session.user.user_metadata?.username
-						user.role = session.user.user_metadata?.role || 'user'
+					let user: UserWithStats
+					if (profile) {
+						// Use profile data
+						user = {
+							id: profile.id,
+							email: profile.email || userId,
+							username: profile.username,
+							role: profile.role || 'user',
+							createdAt: profile.created_at ? new Date(profile.created_at).getTime() : Date.now()
+						}
+					} else {
+						// Create basic user object
+						user = {
+							id: userId,
+							email: userId, // Fallback: use ID as email if we can't get email
+							role: 'user',
+							createdAt: Date.now()
+						}
+						
+						// If this is the current user, we know their email from session
+						if (session?.user?.id === userId) {
+							user.email = session.user.email || userId
+							user.username = session.user.user_metadata?.username
+							user.role = session.user.user_metadata?.role || 'user'
+						}
 					}
 					
 					usersList.push(user)
@@ -133,12 +192,12 @@ export function ManageUsersModal({ isOpen, onClose, onShowToast }: ManageUsersMo
 
 			setUsers(usersList)
 			
-			if (usersList.length > 0 && usersList[0].email === usersList[0].id) {
-				onShowToast?.('Note: User management requires server-side admin API. Email addresses may not be available.', 'info')
+			if (usersList.length > 0 && usersList.some(u => u.email === u.id)) {
+				onShowToast?.('Note: Some user emails may not be available. Full user management requires server-side admin API.', 'info')
 			}
 		} catch (error) {
 			console.error('[ManageUsersModal] Error loading users:', error)
-			onShowToast?.('Failed to load users. Admin API calls require server-side access.', 'error')
+			onShowToast?.('Failed to load users. Check console for details.', 'error')
 		} finally {
 			setLoading(false)
 		}
