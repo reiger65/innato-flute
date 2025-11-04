@@ -396,10 +396,10 @@ class LocalLessonsService implements LessonsService {
 				if (updates.subtitle !== undefined) updateData.subtitle = updates.subtitle
 				if ((updates as any).topic !== undefined) {
 					updateData.topic = (updates as any).topic
-					updateData.category = (updates as any).topic // Also update category field
+					updateData.category = null // Don't use category field - use topic instead
 				}
 				if (updates.description !== undefined) updateData.description = updates.description
-				if (updates.category !== undefined) updateData.difficulty = updates.category
+				if (updates.category !== undefined) updateData.difficulty = updates.category // category maps to difficulty
 				if (updates.compositionId !== undefined) updateData.composition_id = updates.compositionId
 				
 				// If title changed, update lesson_number based on new position
