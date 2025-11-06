@@ -32,6 +32,14 @@
 	dominant-baseline: middle;
 }
 
+/* Ensure finger labels are always visible */
+.fingering text[data-finger-label] {
+	fill: #000000 !important;
+	opacity: 1 !important;
+	visibility: visible !important;
+	pointer-events: none;
+}
+
 .fg-label { 
 	fill: var(--color-black); 
 	font-family: var(--font-sans); 
@@ -51,5 +59,13 @@
 .fg-sub { 
 	font-size: 10px; 
 	font-weight: 600; 
+}
+
+.fg-finger {
+	font-size: 10px !important;
+	font-weight: 700 !important;
+	fill: #000000 !important;
+	font-family: system-ui, -apple-system, sans-serif !important;
+	opacity: 1 !important;
 }
 

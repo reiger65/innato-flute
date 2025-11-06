@@ -1384,6 +1384,23 @@ select.btn-sm:active {
 	display: flex;
 	justify-content: center;
 	margin: var(--space-4) 0;
+	overflow: visible;
+}
+
+.guide-diagram-large .chord-card {
+	overflow: visible;
+	cursor: default !important;
+	pointer-events: none;
+}
+
+.guide-diagram-large .chord-card:hover {
+	transform: none !important;
+	box-shadow: none !important;
+}
+
+.guide-diagram-large svg {
+	overflow: visible;
+	pointer-events: auto;
 }
 
 .guide-diagram-label {

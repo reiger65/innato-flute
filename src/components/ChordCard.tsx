@@ -24,6 +24,7 @@ interface ChordCardProps {
 	fluteType?: FluteType; // Flute tuning (default: Cm4)
 	hideNotes?: boolean; // If true, don't show note labels even if calculated
 	hideChordNumber?: boolean; // If true, don't show chord number in center
+	showLabels?: boolean; // If true, show finger labels and chamber labels (default: false)
 	
 	// Optional: override default proportions (all relative to viewBox)
 	ringRadius?: number; // radius for the 6-hole ring
@@ -53,7 +54,7 @@ interface ChordCardProps {
 // All internal proportions will remain identical.
 // ============================================================================
 
-const VIEWBOX_SIZE = 120;
+const VIEWBOX_SIZE = 140; // Increased from 120 to fit all labels
 const CENTER_X = VIEWBOX_SIZE / 2;
 const CENTER_Y = VIEWBOX_SIZE / 2;
 
@@ -73,6 +74,10 @@ const ARM_ANGLES = [-90, 30, 150] as const; // up, down-right, down-left
 const LABEL_DISTANCE_FROM_ARM_END = 8;  // 6.67% of viewBox - text offset from arm end
 const LABEL_VERTICAL_SHIFT = 5;          // 4.17% of viewBox - base vertical adjustment
 const LABEL_TOP_VERTICAL_SHIFT = -3;    // -2.5% of viewBox - extra upward shift for top label
+const CHAMBER_LABEL_DISTANCE_FROM_ARM_END = 16; // Distance from arm end for chamber labels
+
+// Finger label positioning - distance from hole edge
+const FINGER_LABEL_DISTANCE = 18;        // Distance from hole edge to finger label
 
 // Center text positioning - using relative em units (scales with font size)
 const CENTER_TEXT_VERTICAL_OFFSET = 0.1; // em units - fine vertical adjustment for perfect centering
@@ -91,6 +96,7 @@ export function ChordCard({
 	fluteType = 'Cm4',
 	hideNotes = false,
 	hideChordNumber = false,
+	showLabels = false,
 	ringRadius = DEFAULT_RING_RADIUS,
 	ringRotationDeg = DEFAULT_RING_ROTATION_DEG,
 	holeRadius = DEFAULT_HOLE_RADIUS,
@@ -152,7 +158,11 @@ export function ChordCard({
 				}
 			}}
 			data-chord-active={false}
-			style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+			style={{ 
+				touchAction: 'manipulation', 
+				WebkitTapHighlightColor: 'transparent',
+				cursor: isClickable ? 'pointer' : 'default'
+			}}
 		>
 			<svg
 				className="fingering"
@@ -160,34 +170,98 @@ export function ChordCard({
 				preserveAspectRatio="xMidYMid meet"
 				aria-label="Fingering diagram"
 				style={fluid ? { width: pixelSize, height: pixelSize } : undefined}
+				overflow="visible"
 			>
-				{renderArms(
-					CENTER_X,
-					CENTER_Y,
-					ringRadius,
-					holeRadius,
-					centerRadius,
-					ringRotationDeg,
-					armRx,
-					armRy,
-					finalRoot,
-					finalBottomLeft,
-					finalBottomRight
-				)}
+				{(() => {
+					const computedHoles = computeHoles(holes, openStates, ringRadius, ringRotationDeg);
+					return (
+						<>
+							{renderArms(
+								CENTER_X,
+								CENTER_Y,
+								ringRadius,
+								holeRadius,
+								centerRadius,
+								ringRotationDeg,
+								armRx,
+								armRy,
+								finalRoot,
+								finalBottomLeft,
+								finalBottomRight,
+								showLabels
+							)}
 
-				{computeHoles(holes, openStates, ringRadius, ringRotationDeg).map((h, i) => (
-					<circle key={i} cx={h.cx} cy={h.cy} r={holeRadius} data-open={h.open} />
-				))}
+							{computedHoles.map((h, i) => (
+								<circle key={i} cx={h.cx} cy={h.cy} r={holeRadius} data-open={h.open} />
+							))}
 
-				<circle
-					cx={CENTER_X}
-					cy={CENTER_Y}
-					r={centerRadius}
-					fill="white"
-					stroke="black"
-					strokeWidth="2"
-				/>
-				{renderCenterText(displayValue)}
+							<circle
+								cx={CENTER_X}
+								cy={CENTER_Y}
+								r={centerRadius}
+								fill="white"
+								stroke="black"
+								strokeWidth="2"
+							/>
+							{renderCenterText(displayValue)}
+							{/* Finger labels */}
+							{showLabels && computedHoles.map((hole, i) => {
+								const fingerNames = [
+									'R Middle',   // rightUpper (middle)
+									'R Thumb',    // rightLower (bottom)
+									'L Thumb',    // leftLower (bottom)
+									'L Middle',   // leftUpper (middle)
+									'L Index',    // frontLeft (top)
+									'R Index'     // frontRight (top)
+								];
+								
+								// Calculate direction from center to hole
+								const dx = hole.cx - CENTER_X;
+								const dy = hole.cy - CENTER_Y;
+								const distance = Math.sqrt(dx * dx + dy * dy);
+								
+								// Avoid division by zero
+								if (distance === 0) return null;
+								
+								// Position label further out from the hole
+								// Middle fingers need more distance
+								const isMiddleFinger = i === 0 || i === 3; // R Middle or L Middle
+								const isTopOrBottom = i === 1 || i === 2 || i === 4 || i === 5; // R Thumb, L Thumb, L Index, R Index
+								let labelDistance = FINGER_LABEL_DISTANCE;
+								if (isMiddleFinger) {
+									labelDistance = FINGER_LABEL_DISTANCE + 12;
+								} else if (isTopOrBottom) {
+									labelDistance = FINGER_LABEL_DISTANCE + 3;
+								}
+								const x = hole.cx + (dx / distance) * labelDistance;
+								const y = hole.cy + (dy / distance) * labelDistance;
+								
+								return (
+									<text
+										key={`finger-${i}`}
+										data-finger-label="true"
+										x={x}
+										y={y}
+										textAnchor="middle"
+										dominantBaseline="middle"
+										fontSize="7"
+										fill="#000000"
+										fontFamily="Arial, sans-serif"
+										style={{ 
+											pointerEvents: 'none', 
+											userSelect: 'none',
+											fontWeight: '600',
+											opacity: '1',
+											visibility: 'visible'
+										}}
+									>
+										{fingerNames[i]}
+									</text>
+								);
+							})}
+						</>
+					);
+				})()}
 			</svg>
 		</div>
 	);
@@ -224,7 +298,8 @@ function renderArms(
 	armLength: number,
 	labelTop?: string,
 	labelLeft?: string,
-	labelRight?: string
+	labelRight?: string,
+	showLabels: boolean = false
 ) {
 	const innerR = 0; // Arms start from exact center of middle circle
 	const outerR = innerR + armLength;
@@ -262,6 +337,14 @@ function renderArms(
 			{renderLabel(cx, cy, outerR, -90, labelTop, 'fg-root', true)}
 			{renderLabel(cx, cy, outerR, 150, labelLeft, 'fg-sub', false)}
 			{renderLabel(cx, cy, outerR, 30, labelRight, 'fg-sub', false)}
+			{/* Chamber labels at the end of arms */}
+			{showLabels && (
+				<>
+					{renderChamberLabel(cx, cy, outerR, -90, 'Top Chamber', true)}
+					{renderChamberLabel(cx, cy, outerR, 150, 'Left Chamber', false)}
+					{renderChamberLabel(cx, cy, outerR, 30, 'Right Chamber', false)}
+				</>
+			)}
 		</>
 	);
 }
@@ -299,6 +382,70 @@ function renderLabel(
 		>
 			{label}
 		</text>
+	);
+}
+
+function renderChamberLabel(
+	cx: number,
+	cy: number,
+	armEndRadius: number,
+	armAngleDeg: number,
+	label: string,
+	isTop: boolean = false
+) {
+	const toRad = (deg: number) => (deg * Math.PI) / 180;
+	const angleRad = toRad(armAngleDeg);
+	const textRadius = armEndRadius + CHAMBER_LABEL_DISTANCE_FROM_ARM_END;
+	
+	// Apply vertical shift - extra shift for top label (more upward)
+	const verticalShift = isTop 
+		? LABEL_VERTICAL_SHIFT + LABEL_TOP_VERTICAL_SHIFT - 12
+		: LABEL_VERTICAL_SHIFT;
+	
+	// Horizontal offset for left and right labels to push them further to the sides
+	const isLeft = armAngleDeg === 150;
+	const isRight = armAngleDeg === 30;
+	const horizontalOffset = isLeft ? -32 : isRight ? 32 : 0;
+	
+	const x = cx + textRadius * Math.cos(angleRad) + horizontalOffset;
+	const y = cy + textRadius * Math.sin(angleRad) + verticalShift;
+	
+	// Calculate text width approximation for rectangle
+	const textWidth = label.length * 5.5; // Approximate width per character
+	const textHeight = 10;
+	const padding = 2;
+	const rectWidth = textWidth + padding * 2;
+	const rectHeight = textHeight + padding * 2;
+
+	return (
+		<g>
+			{/* Black rectangle background */}
+			<rect
+				x={x - rectWidth / 2}
+				y={y - rectHeight / 2}
+				width={rectWidth}
+				height={rectHeight}
+				fill="#000000"
+				rx="2"
+			/>
+			{/* White text */}
+			<text
+				x={x}
+				y={y}
+				textAnchor="middle"
+				dominantBaseline="middle"
+				fontSize="9"
+				fill="#FFFFFF"
+				fontFamily="Arial, sans-serif"
+				style={{ 
+					pointerEvents: 'none', 
+					userSelect: 'none',
+					fontWeight: '600'
+				}}
+			>
+				{label}
+			</text>
+		</g>
 	);
 }
 

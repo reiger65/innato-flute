@@ -47,11 +47,20 @@ export function getNoteFrequency(note: string, tuning: TuningFrequency): number 
 /**
  * Simple Audio Player class
  */
+interface PlayingNote {
+	oscillator: OscillatorNode;
+	gainNode: GainNode;
+	frequency: number;
+	note: string; // e.g., "C4", "Eb4"
+	startTime: number;
+}
+
 class SimpleAudioPlayer {
 	private audioContext: AudioContext | null = null;
 	private oscillators: OscillatorNode[] = [];
 	private gainNode: GainNode | null = null;
 	private isInitialized: boolean = false;
+	private playingNotes: Map<string, PlayingNote> = new Map(); // Map note name to playing note info
 
 	/**
 	 * Initialize the Web Audio API context
@@ -116,6 +125,44 @@ class SimpleAudioPlayer {
 			});
 			this.oscillators = [];
 		}
+		this.playingNotes.clear();
+	}
+
+	/**
+	 * Stop specific notes by note names (e.g., ["C4", "Eb4"])
+	 */
+	stopNotes(notesToStop: string[]): void {
+		if (!this.audioContext) return;
+		
+		notesToStop.forEach(note => {
+			const playingNote = this.playingNotes.get(note);
+			if (playingNote && this.audioContext) {
+				try {
+					// Very smooth, gradual fade out to avoid any ticks
+					const now = this.audioContext.currentTime;
+					const fadeOutTime = 0.05; // 50ms gradual fade out
+					
+					// Cancel any scheduled gain changes
+					playingNote.gainNode.gain.cancelScheduledValues(now);
+					const currentGain = Math.max(0.01, playingNote.gainNode.gain.value);
+					
+					// Smooth linear fade out - very gradual
+					playingNote.gainNode.gain.setValueAtTime(currentGain, now);
+					playingNote.gainNode.gain.linearRampToValueAtTime(0, now + fadeOutTime);
+					
+					// Stop oscillator after fade out completes
+					playingNote.oscillator.stop(now + fadeOutTime);
+				} catch {
+					// Oscillator might already be stopped
+				}
+				// Remove from tracking
+				const index = this.oscillators.indexOf(playingNote.oscillator);
+				if (index > -1) {
+					this.oscillators.splice(index, 1);
+				}
+				this.playingNotes.delete(note);
+			}
+		});
 	}
 
 	/**
@@ -126,13 +173,17 @@ class SimpleAudioPlayer {
 	 * @param frontNote - Note for the front chamber (e.g., "G4")
 	 * @param tuning - Tuning frequency standard ("440", "432", or "256")
 	 * @param duration - Duration in seconds (default: 2 seconds)
+	 * @param skipStopAll - If true, don't stop previous sounds (for smooth breath-like progressions)
+	 * @param keepNotes - Array of note names to keep playing (don't stop/restart these)
 	 */
 	async playChord(
 		leftNote: string,
 		rightNote: string,
 		frontNote: string,
 		tuning: TuningFrequency = "440",
-		duration: number = 2.0
+		duration: number = 2.0,
+		skipStopAll: boolean = false,
+		keepNotes: string[] = []
 	): Promise<void> {
 		// Ensure audio is initialized
 		try {
@@ -165,18 +216,99 @@ class SimpleAudioPlayer {
 			}
 		}
 
-		// Stop any currently playing sounds
-		this.stopAll();
+		// Stop any currently playing sounds (unless skipping for smooth transitions)
+		if (!skipStopAll) {
+			// If we have notes to keep, only stop the ones that aren't being kept
+			if (keepNotes.length > 0) {
+				const notesToStop: string[] = [];
+				this.playingNotes.forEach((_, note) => {
+					if (!keepNotes.includes(note)) {
+						notesToStop.push(note);
+					}
+				});
+				// Use AudioContext timing for precise scheduling
+				// Start fading out old notes AFTER new notes have started (using audio context time)
+				if (notesToStop.length > 0 && this.audioContext) {
+					const now = this.audioContext.currentTime;
+					// Schedule fade-out to start after new notes begin (40ms = attack time)
+					notesToStop.forEach(note => {
+						const playingNote = this.playingNotes.get(note);
+						if (playingNote) {
+							// Schedule fade-out to start after new notes have begun fading in
+							const fadeStartTime = now + 0.04; // Start fade after new notes attack begins
+							const fadeOutTime = 0.06; // 60ms fade out
+							
+							playingNote.gainNode.gain.cancelScheduledValues(now);
+							const currentGain = Math.max(0.01, playingNote.gainNode.gain.value);
+							
+							// Keep gain steady until fade starts
+							playingNote.gainNode.gain.setValueAtTime(currentGain, now);
+							playingNote.gainNode.gain.setValueAtTime(currentGain, fadeStartTime);
+							// Then fade out smoothly
+							playingNote.gainNode.gain.linearRampToValueAtTime(0, fadeStartTime + fadeOutTime);
+							
+							// Stop oscillator after fade completes
+							playingNote.oscillator.stop(fadeStartTime + fadeOutTime);
+							
+							// Remove from tracking after fade completes
+							setTimeout(() => {
+								const index = this.oscillators.indexOf(playingNote.oscillator);
+								if (index > -1) {
+									this.oscillators.splice(index, 1);
+								}
+								this.playingNotes.delete(note);
+							}, (fadeStartTime - now + fadeOutTime) * 1000 + 10);
+						}
+					});
+				}
+			} else {
+				this.stopAll();
+			}
+		}
 
-		// Get frequencies for each note
+		const newNotes = [leftNote, rightNote, frontNote];
 		const frequencies = [
 			getNoteFrequency(leftNote, tuning),
 			getNoteFrequency(rightNote, tuning),
 			getNoteFrequency(frontNote, tuning)
 		];
 
-		// Create oscillators for each note
-		frequencies.forEach((freq) => {
+		// Create oscillators for each note (only if not already playing)
+		frequencies.forEach((freq, index) => {
+			const noteName = newNotes[index];
+			
+			// Skip if this note is already playing and should be kept
+			if (keepNotes.includes(noteName) && this.playingNotes.has(noteName)) {
+				// Note is already playing and matches - extend its duration
+				const existingNote = this.playingNotes.get(noteName)!;
+				const now = this.audioContext!.currentTime;
+				
+				// Try to extend the oscillator's stop time
+				// Note: Once stop() is called, we can't cancel it, but we can try to schedule a later stop
+				try {
+					// Cancel any scheduled gain changes and keep it sustained
+					existingNote.gainNode.gain.cancelScheduledValues(now);
+					existingNote.gainNode.gain.setValueAtTime(0.2, now);
+					
+					// Schedule fade out at the end of the new duration
+					const releaseStart = now + duration - 0.1;
+					if (releaseStart > now) {
+						existingNote.gainNode.gain.setValueAtTime(0.2, releaseStart);
+						existingNote.gainNode.gain.linearRampToValueAtTime(0, now + duration);
+					}
+					
+					// Try to extend stop time (this will fail if already stopped, which is fine)
+					try {
+						existingNote.oscillator.stop(now + duration);
+					} catch {
+						// Oscillator already stopped or can't be extended - that's okay, it will continue
+					}
+				} catch {
+					// If we can't extend, the note will continue until its original stop time
+					// This is acceptable - it means the note will play a bit longer
+				}
+				return; // Skip creating a new oscillator for this note
+			}
 			const oscillator = this.audioContext!.createOscillator();
 			const noteGain = this.audioContext!.createGain();
 
@@ -189,8 +321,8 @@ class SimpleAudioPlayer {
 			
 			// Calculate envelope times based on duration for smoother playback
 			// For very short durations, use shorter envelope times to prevent clicks
-			const attackTime = Math.min(0.03, duration * 0.1); // Max 30ms attack, or 10% of duration
-			const releaseTime = Math.min(0.1, duration * 0.2); // Max 100ms release, or 20% of duration
+			const attackTime = Math.min(0.04, duration * 0.12); // Max 40ms attack, or 12% of duration
+			const releaseTime = Math.min(0.08, duration * 0.15); // Max 80ms release, or 15% of duration
 			const sustainStart = now + attackTime;
 			const releaseStart = now + duration - releaseTime;
 			
@@ -201,7 +333,7 @@ class SimpleAudioPlayer {
 			// Sustain: hold for most of the duration
 			noteGain.gain.setValueAtTime(0.2, sustainStart);
 			
-			// Release: smooth fade out (only if duration is long enough)
+			// Release: smooth fade out
 			if (duration > attackTime + releaseTime) {
 				noteGain.gain.setValueAtTime(0.2, releaseStart);
 				noteGain.gain.linearRampToValueAtTime(0, now + duration);
@@ -222,6 +354,15 @@ class SimpleAudioPlayer {
 
 			// Store oscillator for cleanup
 			this.oscillators.push(oscillator);
+			
+			// Track this playing note
+			this.playingNotes.set(noteName, {
+				oscillator,
+				gainNode: noteGain,
+				frequency: freq,
+				note: noteName,
+				startTime: now
+			});
 
 			// Clean up after playback
 			oscillator.onended = () => {
@@ -229,6 +370,7 @@ class SimpleAudioPlayer {
 				if (index > -1) {
 					this.oscillators.splice(index, 1);
 				}
+				this.playingNotes.delete(noteName);
 			};
 		});
 	}

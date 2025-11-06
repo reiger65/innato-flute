@@ -338,42 +338,68 @@ export default function App() {
 
 	/**
 	 * Play chord progression automatically
+	 * @param chordIds - Array of chord IDs to play
+	 * @param customTempo - Optional tempo override (BPM). If not provided, uses global tempo state.
 	 */
-	const playChordProgression = async (chordIds: number[]) => {
-		const delayMs = bpmToDelay(tempo)
+	const playChordProgression = async (chordIds: number[], customTempo?: number) => {
+		const tempoToUse = customTempo !== undefined ? customTempo : tempo
+		const delayMs = bpmToDelay(tempoToUse)
+		const beatDurationSeconds = 60 / tempoToUse
 		// Stop any ongoing playback
 		stopPlayback()
 		
 		setIsPlaying(true)
 		await simplePlayer.initAudio()
 
+		// Calculate overlap for smooth transitions (start next chord slightly before previous ends)
+		const overlapTime = 0.03 // 30ms overlap for smooth breath-like transition
+		const chordDuration = beatDurationSeconds + overlapTime // Slightly longer to allow overlap
+
+		let previousNotes: { left: string; right: string; front: string } | null = null
+
 		for (let i = 0; i < chordIds.length; i++) {
 			const chordId = chordIds[i]
 			const notes = getNotesForChordId(chordId)
-			const isLastChord = i === chordIds.length - 1
 			
 			// Visual feedback - highlight current card
 			updateCardActiveState(chordId)
 
-			// Play the chord - last chord gets longer duration (default 2s + 1 beat)
-			const chordDuration = isLastChord ? 2.0 + (delayMs / 1000) : 2.0
-			await simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration)
+			// Determine which notes to keep playing (notes that match previous chord)
+			const keepNotes: string[] = []
+			if (previousNotes) {
+				if (notes.left === previousNotes.left) keepNotes.push(notes.left)
+				if (notes.right === previousNotes.right) keepNotes.push(notes.right)
+				if (notes.front === previousNotes.front) keepNotes.push(notes.front)
+			}
 
-			// Wait before next chord (except for last one)
+			// Play the chord - don't await, let it play while we wait
+			// For first chord, stop previous sounds. For others, keep matching notes playing.
+			if (i === 0) {
+				simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration, false, [])
+			} else {
+				// Keep matching notes playing, only stop/start the ones that changed
+				simplePlayer.playChord(notes.left, notes.right, notes.front, tuning, chordDuration, true, keepNotes)
+			}
+			
+			// Store current notes for next iteration
+			previousNotes = notes
+
+			// Wait for the beat duration before next chord (with slight overlap)
+			const waitTime = delayMs - (overlapTime * 1000)
 			if (i < chordIds.length - 1) {
 				const timeoutId = window.setTimeout(() => {
 					// Remove active state before next chord
 					updateCardActiveState(null)
-				}, delayMs)
+				}, waitTime)
 				playbackTimeoutRefs.current.push(timeoutId)
 				
-				await new Promise(resolve => setTimeout(resolve, delayMs))
+				await new Promise(resolve => setTimeout(resolve, waitTime))
 			} else {
-				// Last chord - remove active state after it finishes (with extra time for longer duration)
+				// Last chord - cleanup after delay
 				const timeoutId = window.setTimeout(() => {
 					updateCardActiveState(null)
 					setIsPlaying(false)
-				}, delayMs + 1000) // Extra second for the longer duration
+				}, delayMs)
 				playbackTimeoutRefs.current.push(timeoutId)
 			}
 		}
@@ -1844,9 +1870,9 @@ export default function App() {
 												value=""
 												openStates={[true, true, true, true, true, true]}
 												fluteType={fluteType}
-												onClick={() => {}}
 												hideNotes={true}
 												hideChordNumber={true}
+												showLabels={true}
 												fluid={true}
 												pixelSize={200}
 											/>
@@ -2692,7 +2718,7 @@ export default function App() {
 												<button
 													className="btn-sm"
 													onClick={() => {
-														playChordProgression(progression.chordIds)
+														playChordProgression(progression.chordIds, 60)
 													}}
 													style={{ 
 														flex: '0 0 auto',

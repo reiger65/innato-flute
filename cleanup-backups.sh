@@ -60,3 +60,6 @@ echo "   - migrations/ directory"
 echo "   - vercel.json"
 echo "   - package.json and essential config files"
 
+
+
+
