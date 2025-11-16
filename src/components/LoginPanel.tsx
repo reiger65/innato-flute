@@ -69,6 +69,10 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 								onAuthChange(user)
 								// Clean up URL
 								window.history.replaceState({}, document.title, window.location.pathname)
+								// Auto-close after a brief delay
+								setTimeout(() => {
+									onClose()
+								}, 500)
 							} else {
 								setError('Session not found. Please try logging in again.')
 							}
@@ -83,6 +87,10 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 							setCurrentUser(user)
 							onAuthChange(user)
 							window.history.replaceState({}, document.title, window.location.pathname)
+							// Auto-close after a brief delay
+							setTimeout(() => {
+								onClose()
+							}, 500)
 						}
 					}
 				} else {
@@ -92,6 +100,10 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 						setCurrentUser(user)
 						onAuthChange(user)
 						window.history.replaceState({}, document.title, window.location.pathname)
+						// Auto-close after a brief delay
+						setTimeout(() => {
+							onClose()
+						}, 500)
 					}
 				}
 			} else if (accessToken && type === 'recovery') {
@@ -160,6 +172,10 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 				setEmail('')
 				setPassword('')
 				setUsername('')
+				// Auto-close after a brief delay to show success
+				setTimeout(() => {
+					onClose()
+				}, 1000)
 			} else {
 				// User created but email confirmation required
 				setError('Account created! Please check your email to confirm your account before logging in.')
@@ -194,6 +210,10 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 				onAuthChange(result.user)
 				setEmail('')
 				setPassword('')
+				// Auto-close after a brief delay to show success
+				setTimeout(() => {
+					onClose()
+				}, 1000)
 			} else {
 				setError(result.error || 'Invalid email or password')
 			}
@@ -275,6 +295,10 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 				setNewPassword('')
 				setConfirmPassword('')
 				setViewMode('login')
+				// Auto-close after a brief delay to show success
+				setTimeout(() => {
+					onClose()
+				}, 1000)
 			} else {
 				setError('Password updated, but login failed. Please try logging in.')
 			}
