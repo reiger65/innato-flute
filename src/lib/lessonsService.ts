@@ -849,6 +849,7 @@ class LocalLessonsService implements LessonsService {
 		// Load progress (user-specific, requires auth, falls back to localStorage)
 		const { loadLessonProgress } = await import('./lessonProgressService')
 		const progress = await loadLessonProgress()
+		console.log('[lessonsService] Loaded progress:', progress)
 		
 		// Lessons from Supabase are already sorted by lesson_number ascending
 		// But we should sort by custom_id to ensure consistent ordering
@@ -888,7 +889,14 @@ class LocalLessonsService implements LessonsService {
 		return sortedLessons.map((lesson, index) => {
 			const completed = progress[lesson.id] === true
 			// Unlock if it's the first lesson, or if previous lesson is completed
-			const unlocked = index === 0 || (index > 0 && progress[sortedLessons[index - 1].id] === true)
+			const previousLessonId = index > 0 ? sortedLessons[index - 1].id : null
+			const previousCompleted = previousLessonId ? progress[previousLessonId] === true : false
+			const unlocked = index === 0 || previousCompleted
+			
+			// Debug logging
+			if (index < 3) {
+				console.log(`[lessonsService] Lesson ${index + 1} (${lesson.id}): completed=${completed}, unlocked=${unlocked}, previousLessonId=${previousLessonId}, previousCompleted=${previousCompleted}`)
+			}
 			
 			return {
 				...lesson,

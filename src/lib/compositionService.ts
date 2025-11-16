@@ -494,10 +494,13 @@ export async function getComposition(id: string): Promise<SavedComposition | nul
 					.single()
 				
 				if (error) {
-					console.warn('[compositionService] Error reading composition referenced by lesson:', error)
-					console.warn('[compositionService] This might be due to RLS policies. Please run migration 002_allow_lesson_compositions.sql')
+					console.error('[compositionService] Error reading composition referenced by lesson:', error)
+					console.error('[compositionService] Composition ID:', id)
+					console.error('[compositionService] User logged in:', !!session?.user?.id)
+					console.error('[compositionService] This is likely due to RLS policies. Please run migration 002_allow_lesson_compositions.sql in Supabase SQL Editor')
 					// Still try user's own composition as fallback
 				} else if (data) {
+					console.log('[compositionService] Successfully loaded composition referenced by lesson:', id)
 					// Transform to SavedComposition
 					return {
 						id: data.id,

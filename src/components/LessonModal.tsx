@@ -20,6 +20,8 @@ interface LessonModalProps {
 
 export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete, onShowLogin }: LessonModalProps) {
 	const [composition, setComposition] = useState<SavedComposition | null>(null)
+	const [isLoading, setIsLoading] = useState(true)
+	const [error, setError] = useState<string | null>(null)
 	const [selectedChordIndex, setSelectedChordIndex] = useState(0)
 	const [isPlaying, setIsPlaying] = useState(false)
 	const [isPaused, setIsPaused] = useState(false)
@@ -42,16 +44,37 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete, on
 	// Load composition when modal opens
 	useEffect(() => {
 		const loadComp = async () => {
+			setIsLoading(true)
+			setError(null)
 			if (lesson.compositionId) {
-				const comp = await getComposition(lesson.compositionId)
-				setComposition(comp || null)
-				if (comp && comp.chords.length > 0) {
-					setSelectedChordIndex(0)
+				console.log('[LessonModal] Loading composition for lesson:', lesson.id, 'compositionId:', lesson.compositionId)
+				try {
+					const comp = await getComposition(lesson.compositionId)
+					if (comp) {
+						console.log('[LessonModal] Composition loaded successfully:', comp.id, comp.name)
+						setComposition(comp)
+						if (comp.chords && comp.chords.length > 0) {
+							setSelectedChordIndex(0)
+						}
+					} else {
+						console.error('[LessonModal] Composition not found or failed to load. Check console for RLS policy errors.')
+						setComposition(null)
+						setError('Composition not found or failed to load')
+					}
+				} catch (error) {
+					console.error('[LessonModal] Error loading composition:', error)
+					setComposition(null)
+					setError(error instanceof Error ? error.message : 'Unknown error loading composition')
 				}
+			} else {
+				console.warn('[LessonModal] Lesson has no compositionId assigned:', lesson.id, lesson.title)
+				setComposition(null)
+				setError('No composition assigned to this lesson')
 			}
+			setIsLoading(false)
 		}
 		loadComp()
-	}, [lesson.compositionId])
+	}, [lesson.compositionId, lesson.id, lesson.title])
 
 	// If not logged in and composition can't be loaded, open login screen and close modal
 	useEffect(() => {
@@ -92,7 +115,45 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete, on
 		}
 	}, [])
 
-	if (!lesson.compositionId || !composition) {
+	// Early return if lesson has no composition or composition is still loading/failed
+	if (!lesson.compositionId || isLoading || !composition) {
+		return (
+			<div className="lesson-modal-overlay" onClick={handleClose}>
+				<div className="lesson-modal" onClick={(e) => e.stopPropagation()}>
+					<div className="lesson-modal-header">
+						<div>
+							<h2 className="lesson-modal-title">{lesson.title}</h2>
+						</div>
+						<button className="icon-btn-sm" onClick={handleClose} aria-label="Close">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						</button>
+					</div>
+					{isLoading ? (
+						<p className="lesson-modal-description">Loading lesson...</p>
+					) : error ? (
+						<p className="lesson-modal-description" style={{ color: 'var(--color-black)' }}>
+							{error}
+						</p>
+					) : (
+						<p className="lesson-modal-description">
+							{isLoggedIn 
+								? lesson.compositionId 
+									? "Unable to load the composition for this lesson. This may be due to database permissions. Please check the browser console for details or contact support@stonewhistle.com"
+									: "No composition assigned to this lesson yet. An admin needs to assign a composition to this lesson using the Manage Lessons button."
+								: "Opening login screen..."}
+						</p>
+					)}
+				</div>
+			</div>
+		)
+	}
+
+	// At this point, composition is guaranteed to be non-null, but add safety check
+	if (!composition || !composition.chords) {
+		console.error('[LessonModal] Composition is null or missing chords:', composition)
 		return (
 			<div className="lesson-modal-overlay" onClick={handleClose}>
 				<div className="lesson-modal" onClick={(e) => e.stopPropagation()}>
@@ -108,9 +169,7 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete, on
 						</button>
 					</div>
 					<p className="lesson-modal-description">
-						{isLoggedIn 
-							? "No composition assigned to this lesson yet. Please create a composition in the composer first."
-							: "Opening login screen..."}
+						Error: Composition data is invalid. Please contact support@stonewhistle.com
 					</p>
 				</div>
 			</div>
