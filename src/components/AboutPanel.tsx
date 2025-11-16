@@ -23,8 +23,6 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
 				</div>
 
 				<div className="guide-content">
-					<h3 className="guide-section-title">Welcome to Progressions</h3>
-
 					<h3 className="guide-section-title">What is the INNATO Flute?</h3>
 					<p className="guide-text">
 						The word "Innato" means "inborn" or "innate" in Italian, reflecting the idea that the knowledge to play is already within you. This unique instrument is designed to feel intuitive, allowing you to express music that flows naturally from your body.

@@ -391,7 +391,8 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 										width: '100%',
 										border: '2px solid #dc2626',
 										color: '#dc2626',
-										background: 'transparent'
+										background: 'transparent',
+										marginBottom: 'var(--space-4)'
 									}}
 								>
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }}>
@@ -403,6 +404,34 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 									Manage Users
 								</button>
 							)}
+
+							{/* Support Information */}
+							<div style={{ 
+								marginTop: 'var(--space-4)',
+								paddingTop: 'var(--space-4)',
+								borderTop: 'var(--border-1) solid rgba(0, 0, 0, 0.2)',
+								textAlign: 'center',
+								paddingBottom: 'var(--space-2)'
+							}}>
+								<p style={{ 
+									fontSize: 'var(--font-size-sm)', 
+									color: 'rgba(0, 0, 0, 0.7)',
+									margin: 0,
+									lineHeight: 1.6
+								}}>
+									Need support? Contact us at{' '}
+									<a 
+										href="mailto:support@stonewhistle.com" 
+										style={{ 
+											color: 'var(--color-black)', 
+											textDecoration: 'underline',
+											fontWeight: 'var(--font-weight-semibold)'
+										}}
+									>
+										support@stonewhistle.com
+									</a>
+								</p>
+							</div>
 						</div>
 					) : magicLinkSent ? (
 						// Magic link sent confirmation
@@ -940,6 +969,34 @@ export function LoginPanel({ onClose, onAuthChange, onShowManageUsers }: LoginPa
 									</div>
 								)}
 							</form>
+
+							{/* Support Information */}
+							<div style={{ 
+								marginTop: 'var(--space-4)',
+								paddingTop: 'var(--space-4)',
+								borderTop: 'var(--border-1) solid rgba(0, 0, 0, 0.2)',
+								textAlign: 'center',
+								paddingBottom: 'var(--space-2)'
+							}}>
+								<p style={{ 
+									fontSize: 'var(--font-size-sm)', 
+									color: 'rgba(0, 0, 0, 0.7)',
+									margin: 0,
+									lineHeight: 1.6
+								}}>
+									Need support? Contact us at{' '}
+									<a 
+										href="mailto:support@stonewhistle.com" 
+										style={{ 
+											color: 'var(--color-black)', 
+											textDecoration: 'underline',
+											fontWeight: 'var(--font-weight-semibold)'
+										}}
+									>
+										support@stonewhistle.com
+									</a>
+								</p>
+							</div>
 						</div>
 					)}
 				</div>

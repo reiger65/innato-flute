@@ -1791,6 +1791,23 @@ export default function App() {
 										<p className="guide-text">
 											Welcome to stonewhistle INNATO Explorations. This app is designed to enhance your flute experience by helping you explore and learn different chord patterns. Whether you're just starting out or looking to expand your musical knowledge, this guide will help you get the most out of your practice sessions.
 										</p>
+										<p className="guide-text">
+											<strong>Learn more:</strong> All information about the INNATO flute is available at <a href="https://www.stonewhistle.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-black)', textDecoration: 'underline' }}>www.stonewhistle.com</a>
+										</p>
+									</div>
+
+									<div className="guide-block">
+										<h3 className="guide-section-title">Account Required</h3>
+										<p className="guide-text">
+											<strong>Important:</strong> You'll need to create a free account and log in to access certain features:
+										</p>
+										<ul className="guide-list">
+											<li><strong>Lessons:</strong> Requires login to view and practice structured lessons</li>
+											<li><strong>Community:</strong> Requires login to share compositions/progressions and discover what others have created</li>
+										</ul>
+										<p className="guide-text">
+											You can explore <strong>Basics</strong>, <strong>Practice</strong>, and <strong>Compose</strong> without logging in, but your work will only be saved locally. Logging in syncs your compositions, progress, and favorites across devices.
+										</p>
 									</div>
 
 									<div className="guide-block">
@@ -1799,6 +1816,7 @@ export default function App() {
 										<ul className="guide-list">
 											<li>Select your flute key from the Key dropdown in the upper right corner</li>
 											<li>Choose your preferred pitch standard (Pitch) — either 440 Hz or 432 Hz</li>
+											<li>Click the Login button (person icon) in the top left to create a free account if you want to access Lessons and Community</li>
 										</ul>
 										<p className="guide-text">
 											These settings ensure that all chord diagrams and audio playback match your specific INNATO flute model.
@@ -1807,11 +1825,11 @@ export default function App() {
 
 									<div className="guide-block">
 										<h3 className="guide-section-title">App Navigation</h3>
-										<p className="guide-text">This app is organized into three main areas:</p>
+										<p className="guide-text">This app is organized into three main tabs:</p>
 										<ul className="guide-list">
-											<li><strong>Learn:</strong> Explore different chord patterns and learn how to play your flute</li>
-											<li><strong>Compose:</strong> Create your own musical sequences by combining chords</li>
-											<li><strong>Community:</strong> Share your compositions and discover pieces created by others</li>
+											<li><strong>LEARN:</strong> Contains four sections - Basics (guide, fingering, videos), Practice (all 64 chords), Lessons (structured learning journey), and Advanced (meditation & breathing techniques)</li>
+											<li><strong>COMPOSE:</strong> Create your own musical compositions by adding chords, setting tempo and rhythm, and saving your work</li>
+											<li><strong>COMMUNITY:</strong> Share your compositions and progressions, and discover pieces created by other users (requires login)</li>
 										</ul>
 									</div>
 
@@ -1819,12 +1837,13 @@ export default function App() {
 										<h3 className="guide-section-title">Using This App</h3>
 										<p className="guide-text">To get started:</p>
 										<ul className="guide-list">
-											<li>Navigate between Learn, Compose, and Community using the tabs at the top</li>
-											<li>In the Learn tab, start with the Basics section to understand how the app works</li>
-											<li>In Practice, click on any chord card to hear how it sounds</li>
-											<li>Use the Shuffle button to generate random chord combinations</li>
-											<li>Use the Play button to hear a chord progression play automatically</li>
-											<li>Switch to Compose to create and play your own chord progressions</li>
+											<li>Start in the <strong>LEARN</strong> tab → <strong>Basics</strong> section to understand the INNATO flute system</li>
+											<li>In <strong>Practice</strong>, explore all 64 chords - click any chord card to hear it</li>
+											<li>Use <strong>Shuffle</strong> to generate random chord sequences, then <strong>Play</strong> to hear them automatically</li>
+											<li>Select chords (circle icon) to create progressions, or favorite them (heart icon) for quick access</li>
+											<li>In <strong>Lessons</strong>, follow structured lessons that unlock as you progress</li>
+											<li>Switch to <strong>COMPOSE</strong> to create and save your own musical compositions</li>
+											<li>Use <strong>COMMUNITY</strong> (after logging in) to share and discover compositions</li>
 										</ul>
 									</div>
 
@@ -1834,10 +1853,10 @@ export default function App() {
 											The buttons in the top left corner provide quick access to additional features:
 										</p>
 										<ul className="guide-list">
-											<li><strong>Music Notes:</strong> Access your saved progressions and favorites</li>
-											<li><strong>Audio Source:</strong> Configure audio settings and playback options</li>
-											<li><strong>Information:</strong> Learn more about the INNATO flute and techniques</li>
-											<li><strong>Login:</strong> Access your account to sync progress across devices</li>
+											<li><strong>Music Notes (Library):</strong> Opens a side panel with an interactive chord finder, all 64 chords, and your saved progressions</li>
+											<li><strong>Audio Source (Drone):</strong> Opens a drone player with Tanpura or Shrutibox instruments to play continuous tones</li>
+											<li><strong>Information (About):</strong> Learn about the INNATO flute philosophy, unique sound experience, and instrument design</li>
+											<li><strong>Login (Account):</strong> Sign in to sync your compositions, progress, and favorites across devices, and access Community features</li>
 										</ul>
 									</div>
 								</div>
@@ -2265,7 +2284,7 @@ export default function App() {
 						<>
 					{/* Section header */}
 					<div className="section-title">Practice Progressions</div>
-					<div className="section-desc">Try playing along with these example progressions.</div>
+					<div className="section-desc">Explore all 64 INNATO chord combinations. Click chords to hear them, select chords to create progressions, favorite chords you like, and use Shuffle and Play to practice with random sequences.</div>
 
 					{/* Controls */}
 					<div className="controls">
@@ -2489,28 +2508,35 @@ export default function App() {
 			>
 				<div className="guide-content">
 					<div className="guide-block">
-						<h3 className="guide-section-title">Interactive Chord Finder</h3>
+						<h3 className="guide-section-title">Practice Progressions</h3>
+						<p className="guide-text">The Practice section displays all 64 INNATO chord combinations in a grid. Here's how to use it:</p>
 						<ul className="guide-list">
-							<li>Tap on any hole in the diagram to toggle it open or closed</li>
-							<li>Watch the chord number update as you change the pattern</li>
-							<li>Click "Save Chord" to add the current chord to your favorites</li>
+							<li><strong>Hear chords:</strong> Click any chord card to play its sound</li>
+							<li><strong>Select chords:</strong> Click the circle icon (○) in the top-left corner to select chords for creating progressions</li>
+							<li><strong>Favorite chords:</strong> Click the heart icon (♥) in the top-right corner to save chords to your favorites</li>
+							<li><strong>Shuffle:</strong> Generates a random sequence of 4 chords</li>
+							<li><strong>Play:</strong> Plays the current chord sequence automatically at the set tempo</li>
+							<li><strong>Show Me:</strong> Highlights each chord in sequence as it plays</li>
+							<li><strong>Save:</strong> Saves the current sequence as a named progression</li>
+							<li><strong>Tempo slider:</strong> Adjust playback speed from 10-120 BPM</li>
 						</ul>
 					</div>
 					<div className="guide-block">
-						<h3 className="guide-section-title">All 64 Chord Combinations</h3>
+						<h3 className="guide-section-title">Creating Progressions</h3>
 						<ul className="guide-list">
-							<li><strong>Tap any chord card</strong> to hear how it sounds</li>
-							<li><strong>Select chords</strong> by clicking the circle icon (○) in the top-left corner of a chord card</li>
-							<li><strong>Save as favorite</strong> by clicking the heart icon (♥) in the top-right corner</li>
-							<li><strong>Create a progression:</strong> Select 2 or more chords, then click "Select 2+ chords to save as progression"</li>
+							<li>Select 2 or more chords using the circle icons</li>
+							<li>Click "Select 2+ chords to save as progression" to save your selection</li>
+							<li>Or use "Manage Progressions" to view, rename, or delete saved progressions</li>
+							<li>Saved progressions can be loaded in the Composer or shared to Community</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Tips</h3>
 						<ul className="guide-list">
-							<li>Start by exploring different chords to discover sounds you like</li>
-							<li>Save your favorite chords for quick access later</li>
-							<li>Combine multiple chords to create your own musical sequences</li>
+							<li>Explore different chords to discover sounds you like</li>
+							<li>Favorite chords you use frequently for quick access</li>
+							<li>Experiment with different chord combinations and tempos</li>
+							<li>Use Shuffle to discover new chord progressions</li>
 						</ul>
 					</div>
 				</div>
@@ -2524,49 +2550,56 @@ export default function App() {
 				<div className="guide-content">
 					<div className="guide-block">
 						<h3 className="guide-section-title">Creating Compositions</h3>
+						<p className="guide-text">The Composer lets you create musical compositions by arranging chords:</p>
 						<ul className="guide-list">
-							<li><strong>Add Chord:</strong> Click "Add Chord" to open the selector, then choose a chord to add to your composition</li>
-							<li><strong>Add Progression:</strong> Select a saved progression from your library to add all its chords at once</li>
+							<li><strong>Add Chord:</strong> Click "Add Chord" to open the chord selector, then choose a chord to add to your composition</li>
+							<li><strong>Add Progression:</strong> Click "Add Progression" to select a saved progression from your library - all its chords will be added at once</li>
 							<li><strong>Add Rest:</strong> Click "Add Rest" to insert a pause (silence) in your composition</li>
+							<li>Chords are added to the timeline in the order you select them</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Editing Your Composition</h3>
 						<ul className="guide-list">
-							<li><strong>Main Card:</strong> The large card shows the currently selected chord</li>
-							<li><strong>Timeline:</strong> The horizontal timeline below shows your full composition</li>
-							<li><strong>Select a chord:</strong> Click any card in the timeline to select and view it</li>
-							<li><strong>Change rhythm:</strong> Use the + and - buttons to adjust how many beats each chord lasts</li>
+							<li><strong>Main Card:</strong> The large card at the top shows the currently selected chord with its fingering diagram</li>
+							<li><strong>Timeline:</strong> The horizontal timeline below shows your full composition as a sequence of chord cards</li>
+							<li><strong>Select a chord:</strong> Click any card in the timeline to select it and view it in the main card</li>
+							<li><strong>Change rhythm:</strong> Use the + and - buttons above the timeline to adjust how many beats each chord lasts (shown as dots)</li>
 							<li><strong>Reorder:</strong> Drag and drop cards in the timeline to rearrange your composition</li>
-							<li><strong>Remove:</strong> Click the × button that appears when hovering over a card</li>
+							<li><strong>Remove:</strong> Click the × button that appears when hovering over a card in the timeline</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Playback Settings</h3>
 						<ul className="guide-list">
-							<li><strong>Tempo:</strong> Adjust the slider to set the speed (10-120 BPM)</li>
-							<li><strong>Time Signature:</strong> Choose 3/4 or 4/4 to set the rhythm structure</li>
+							<li><strong>Tempo:</strong> Adjust the slider to set playback speed from 10-120 BPM</li>
+							<li><strong>Time Signature:</strong> Choose 3/4 (waltz) or 4/4 (common time) to set the rhythm structure</li>
 							<li><strong>Metronome:</strong> Toggle the metronome button to hear a click track while playing</li>
-							<li><strong>Note:</strong> In 3/4 time, you can only add up to 3 rhythm dots per chord</li>
+							<li><strong>Note:</strong> In 3/4 time, you can only add up to 3 rhythm dots per chord (one per beat)</li>
+							<li>Settings apply to both playback and when adding new chords</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Saving and Loading</h3>
 						<ul className="guide-list">
-							<li><strong>New:</strong> Click "New" to clear the composer and start fresh</li>
-							<li><strong>Save:</strong> Click "Save" to save your composition with a name</li>
-							<li><strong>Open:</strong> Click "Open" to load a previously saved composition</li>
-							<li><strong>Rename:</strong> When opening, you can click the pencil icon to rename a composition</li>
+							<li><strong>New:</strong> Click "New" to clear the composer and start a fresh composition</li>
+							<li><strong>Save:</strong> Click "Save" to save your composition with a name - it will be saved locally and synced to your account if logged in</li>
+							<li><strong>Open:</strong> Click "Open" to browse and load a previously saved composition</li>
+							<li><strong>Rename:</strong> When opening, click the pencil icon next to a composition name to rename it</li>
+							<li><strong>Delete:</strong> When opening, click the trash icon to delete a saved composition</li>
+							<li>Saved compositions can also be shared to Community (requires login)</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Playing Your Composition</h3>
 						<ul className="guide-list">
-							<li>Click "Play" to hear your composition played automatically</li>
-							<li>The active chord will be highlighted during playback</li>
-							<li>Rhythm dots will light up to show the beat</li>
+							<li>Click "Play" to hear your composition played automatically at the set tempo</li>
+							<li>The active chord in the timeline will be highlighted during playback</li>
+							<li>Rhythm dots will light up sequentially to show the beat</li>
+							<li>The main card updates to show the currently playing chord</li>
 							<li>The last chord will ring out longer for a natural ending</li>
 							<li>Click "Stop" (or Play again) to stop playback</li>
+							<li>You can pause and resume playback</li>
 						</ul>
 					</div>
 				</div>
@@ -2580,47 +2613,54 @@ export default function App() {
 				<div className="guide-content">
 					<div className="guide-block">
 						<h3 className="guide-section-title">Lesson Structure</h3>
+						<p className="guide-text">Lessons provide a structured learning journey through the INNATO flute:</p>
 						<ul className="guide-list">
-							<li>Lessons are displayed horizontally in a timeline</li>
-							<li>Each lesson contains a saved composition that you'll practice</li>
+							<li>Lessons are displayed horizontally in a scrollable timeline</li>
+							<li>Each lesson contains a saved composition with chords, tempo, and rhythm</li>
 							<li>Lessons are numbered sequentially (Lesson 1, 2, 3, etc.)</li>
-							<li>Each lesson shows its title, category, and description</li>
+							<li>Each lesson shows its title, subtitle, topic, category (beginner/intermediate/advanced), and description</li>
+							<li>Lessons are organized into topics like "Progressions", "Melodies", and "Compositions"</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Unlocking Lessons</h3>
 						<ul className="guide-list">
 							<li>The first lesson is unlocked by default</li>
-							<li>Complete a lesson to unlock the next one</li>
-							<li>Locked lessons show a lock icon and cannot be opened</li>
+							<li>Complete a lesson by clicking "✓ Mark as Complete" to unlock the next one</li>
+							<li>Locked lessons show a lock icon and cannot be opened until unlocked</li>
 							<li>Completed lessons show a checkmark icon</li>
+							<li>Your progress is tracked and synced when logged in</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Using a Lesson</h3>
+						<p className="guide-text">When you open a lesson:</p>
 						<ul className="guide-list">
-							<li>Click on an unlocked lesson to open it</li>
-							<li>The lesson modal shows a large card with the current chord</li>
-							<li>Rhythm dots above the card show the beat pattern</li>
-							<li>The timeline below shows all chords in the composition</li>
+							<li>A modal opens showing the lesson composition</li>
+							<li>The large central card displays the currently selected chord with its fingering diagram</li>
+							<li>Rhythm dots above the card show the beat pattern (how many beats this chord lasts)</li>
+							<li>The horizontal timeline below shows all chords in the composition</li>
+							<li>Click any chord in the timeline to jump to it and hear it</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Lesson Controls</h3>
 						<ul className="guide-list">
-							<li><strong>Previous/Next:</strong> Navigate between chords manually</li>
-							<li><strong>Play:</strong> Play the entire composition automatically</li>
-							<li><strong>Click cards:</strong> Click any chord in the timeline to jump to it and hear it</li>
-							<li><strong>Mark Complete:</strong> Click "✓ Mark as Complete" when you're done practicing</li>
+							<li><strong>Previous/Next buttons:</strong> Navigate between chords manually</li>
+							<li><strong>Play button:</strong> Plays the entire composition automatically at the lesson's tempo</li>
+							<li><strong>Timeline interaction:</strong> Click any chord card in the timeline to jump to that position</li>
+							<li><strong>Mark Complete:</strong> Click "✓ Mark as Complete" when you've finished practicing the lesson</li>
+							<li><strong>Close:</strong> Click the X button or outside the modal to close</li>
 						</ul>
 					</div>
 					<div className="guide-block">
-						<h3 className="guide-section-title">Progress</h3>
+						<h3 className="guide-section-title">Progress Tracking</h3>
 						<ul className="guide-list">
-							<li>Your progress is saved automatically</li>
-							<li>The top shows how many lessons you've completed (e.g., "5/12 complete")</li>
+							<li>The top of the Lessons section shows your completion count (e.g., "5/12 complete")</li>
 							<li>When you complete a lesson, the next one unlocks automatically</li>
-							<li>After completing a lesson, the app may automatically jump to the next unlocked lesson</li>
+							<li>After marking a lesson complete, the app may automatically open the next unlocked lesson</li>
+							<li>Progress is saved locally and synced to your account when logged in</li>
+							<li>You can review completed lessons at any time</li>
 						</ul>
 					</div>
 				</div>
@@ -2633,41 +2673,48 @@ export default function App() {
 			>
 				<div className="guide-content">
 					<div className="guide-block">
+						<h3 className="guide-section-title">Advanced Techniques</h3>
+						<p className="guide-text">
+							The Advanced section contains two categories of techniques to deepen your INNATO flute practice. Use the navigation dots below each section to browse through the techniques.
+						</p>
+					</div>
+					<div className="guide-block">
 						<h3 className="guide-section-title">Meditation Techniques</h3>
 						<p className="guide-text">
-							Explore 7 different meditation techniques designed to deepen your connection with the INNATO flute. Use the navigation dots below to browse through each technique.
+							Explore 7 meditation techniques designed to deepen your connection with the INNATO flute and enhance your practice:
 						</p>
 						<ul className="guide-list">
-							<li><strong>Listening:</strong> Focus on the sound and response of your instrument</li>
-							<li><strong>Vibration:</strong> Pay attention to the vibrations reaching your fingertips</li>
-							<li><strong>Immersion:</strong> Create a safe space with the sound of your flute</li>
-							<li><strong>Mirror:</strong> Mirror natural sounds around you</li>
-							<li><strong>Soundwalk:</strong> Walk slowly while playing and notice rhythm</li>
-							<li><strong>Randomness:</strong> Let your fingers move without thinking</li>
-							<li><strong>Sounddrops:</strong> Create tapping sounds with your fingers</li>
+							<li><strong>1. Listening:</strong> Focus on the sound and response of your instrument, notice your heartbeat rhythm and breath tension</li>
+							<li><strong>2. Vibration:</strong> Pay attention to the vibrations reaching your fingertips as you play different notes</li>
+							<li><strong>3. Immersion:</strong> Create a safe space by playing facing a wall, imagining being inside the instrument</li>
+							<li><strong>4. Mirror:</strong> Mirror natural sounds around you in nature, invite all sounds and respond with your flute</li>
+							<li><strong>5. Soundwalk:</strong> Walk slowly while playing, notice how footsteps create rhythm in your breath</li>
+							<li><strong>6. Randomness:</strong> Let your fingers move without thinking, create random patterns by opening and closing holes</li>
+							<li><strong>7. Sounddrops:</strong> Tap your fingers on the holes to create tapping sounds, explore rhythm and melody</li>
 						</ul>
 					</div>
 					<div className="guide-block">
 						<h3 className="guide-section-title">Breathing Techniques</h3>
 						<p className="guide-text">
-							Practice 6 breathing techniques to improve your breath control and create different sounds. Use the navigation dots below to browse through each technique.
+							Practice 6 breathing techniques to improve your breath control and create different sounds:
 						</p>
 						<ul className="guide-list">
-							<li><strong>Steady Breath:</strong> Practice slow, deep inhales and steady exhales</li>
-							<li><strong>Dipping:</strong> Create dips in volume for rhythmic patterns</li>
-							<li><strong>Rhythm:</strong> Use your tongue to create rhythmic pulses (T sounds)</li>
-							<li><strong>Dropping:</strong> Slowly drop pressure to create soft whistling sounds</li>
-							<li><strong>Using Your Voice:</strong> Match the note with your voice for resonance</li>
-							<li><strong>Random Staccato:</strong> Create short pushes of air in random patterns</li>
+							<li><strong>1. Steady Breath:</strong> Practice slow, deep inhales and steady exhales for consistent tone</li>
+							<li><strong>2. Dipping:</strong> Create dips in volume for rhythmic patterns and dynamic expression</li>
+							<li><strong>3. Rhythm:</strong> Use your tongue to create rhythmic pulses (T sounds) for percussive effects</li>
+							<li><strong>4. Dropping:</strong> Slowly drop pressure to create soft whistling sounds and gentle transitions</li>
+							<li><strong>5. Using Your Voice:</strong> Match the note with your voice for resonance and harmonic effects</li>
+							<li><strong>6. Random Staccato:</strong> Create short pushes of air in random patterns for experimental sounds</li>
 						</ul>
 					</div>
 					<div className="guide-block">
-						<h3 className="guide-section-title">Navigation</h3>
+						<h3 className="guide-section-title">How to Use</h3>
 						<ul className="guide-list">
-							<li>Use the dots below each section to navigate between techniques</li>
-							<li>Each technique has detailed instructions to follow</li>
+							<li>Use the navigation dots below each section to move between techniques</li>
+							<li>Read the detailed instructions for each technique</li>
 							<li>Practice each technique at your own pace</li>
-							<li>Combine techniques for more complex musical expressions</li>
+							<li>Combine different techniques for more complex musical expressions</li>
+							<li>These techniques can enhance both your playing and your meditative practice</li>
 						</ul>
 					</div>
 				</div>

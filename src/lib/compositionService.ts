@@ -476,7 +476,49 @@ export async function getComposition(id: string): Promise<SavedComposition | nul
 			
 			const { data: { session } } = await supabase.auth.getSession()
 			
-			// If logged in, try to get user's own composition first
+			// First check if this composition is referenced by a lesson (for security)
+			// This check should happen regardless of login status
+			const { data: lessonCheck } = await supabase
+				.from('lessons')
+				.select('composition_id')
+				.eq('composition_id', id)
+				.limit(1)
+			
+			// If referenced by a lesson, try to read it (lessons are public)
+			// This works for both logged-in and logged-out users
+			if (lessonCheck && lessonCheck.length > 0) {
+				const { data, error } = await supabase
+					.from('compositions')
+					.select('*')
+					.eq('id', id)
+					.single()
+				
+				if (error) {
+					console.warn('[compositionService] Error reading composition referenced by lesson:', error)
+					console.warn('[compositionService] This might be due to RLS policies. Please run migration 002_allow_lesson_compositions.sql')
+					// Still try user's own composition as fallback
+				} else if (data) {
+					// Transform to SavedComposition
+					return {
+						id: data.id,
+						name: data.name,
+						chords: data.chords as SavedComposition['chords'],
+						tempo: data.tempo,
+						timeSignature: data.time_signature as '3/4' | '4/4',
+						fluteType: 'innato', // Default
+						tuning: '440', // Default
+						createdAt: new Date(data.created_at).getTime(),
+						updatedAt: new Date(data.updated_at).getTime(),
+						// Include metadata fields if they exist
+						...(data as any).subtitle && { subtitle: (data as any).subtitle },
+						...(data as any).description && { description: (data as any).description },
+						...(data as any).topic && { topic: (data as any).topic },
+						...(data as any).difficulty && { difficulty: (data as any).difficulty }
+					} as SavedComposition & { subtitle?: string; description?: string; topic?: string; difficulty?: string }
+				}
+			}
+			
+			// If logged in, also try to get user's own composition (in case it's not a lesson composition)
 			if (session?.user?.id) {
 				const { data, error } = await supabase
 					.from('compositions')
@@ -498,49 +540,6 @@ export async function getComposition(id: string): Promise<SavedComposition | nul
 						createdAt: new Date(data.created_at).getTime(),
 						updatedAt: new Date(data.updated_at).getTime(),
 						// Include metadata fields if they exist (cast to any to allow additional fields)
-						...(data as any).subtitle && { subtitle: (data as any).subtitle },
-						...(data as any).description && { description: (data as any).description },
-						...(data as any).topic && { topic: (data as any).topic },
-						...(data as any).difficulty && { difficulty: (data as any).difficulty }
-					} as SavedComposition & { subtitle?: string; description?: string; topic?: string; difficulty?: string }
-				}
-			}
-			
-			// If not logged in, or user's composition not found, try without user filter
-			// This allows reading compositions referenced by public lessons
-			// First check if this composition is referenced by a lesson (for security)
-			const { data: lessonCheck } = await supabase
-				.from('lessons')
-				.select('composition_id')
-				.eq('composition_id', id)
-				.limit(1)
-			
-			// If referenced by a lesson, allow reading (lessons are public)
-			// This works for both logged-in and logged-out users
-			if (lessonCheck && lessonCheck.length > 0) {
-				const { data, error } = await supabase
-					.from('compositions')
-					.select('*')
-					.eq('id', id)
-					.single()
-				
-				if (error) {
-					console.warn('[compositionService] Error reading composition referenced by lesson:', error)
-					console.warn('[compositionService] This might be due to RLS policies. Please run migration 002_allow_lesson_compositions.sql')
-					// Still fall through to localStorage
-				} else if (data) {
-					// Transform to SavedComposition
-					return {
-						id: data.id,
-						name: data.name,
-						chords: data.chords as SavedComposition['chords'],
-						tempo: data.tempo,
-						timeSignature: data.time_signature as '3/4' | '4/4',
-						fluteType: 'innato', // Default
-						tuning: '440', // Default
-						createdAt: new Date(data.created_at).getTime(),
-						updatedAt: new Date(data.updated_at).getTime(),
-						// Include metadata fields if they exist
 						...(data as any).subtitle && { subtitle: (data as any).subtitle },
 						...(data as any).description && { description: (data as any).description },
 						...(data as any).topic && { topic: (data as any).topic },
