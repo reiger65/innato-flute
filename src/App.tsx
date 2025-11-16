@@ -1324,7 +1324,7 @@ export default function App() {
 													marginBottom: 'var(--space-2)',
 													fontStyle: 'italic'
 												}}>
-													No composition assigned
+													{currentUser ? 'No composition assigned' : 'Login required'}
 												</div>
 											)}
 											<h3 className="lesson-card-title">
@@ -1789,7 +1789,7 @@ export default function App() {
 									<div className="guide-block">
 										<h3 className="guide-section-title">Getting Started with INNATO</h3>
 										<p className="guide-text">
-											Welcome to Progressions! This app is designed to enhance your flute experience by helping you explore and learn different chord patterns. Whether you're just starting out or looking to expand your musical knowledge, this guide will help you get the most out of your practice sessions.
+											Welcome to stonewhistle INNATO Explorations. This app is designed to enhance your flute experience by helping you explore and learn different chord patterns. Whether you're just starting out or looking to expand your musical knowledge, this guide will help you get the most out of your practice sessions.
 										</p>
 									</div>
 
@@ -2445,6 +2445,7 @@ export default function App() {
 							}, 150)
 						}
 					}}
+					onShowLogin={() => setShowLogin(true)}
 				/>
 			)}
 

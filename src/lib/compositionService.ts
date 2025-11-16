@@ -464,6 +464,9 @@ export async function deleteAllCompositions(): Promise<number> {
 
 /**
  * Get single composition by ID
+ * If user is logged in, tries to get their own composition first
+ * If not logged in or not found, tries to get composition without user filter
+ * (This allows reading compositions referenced by public lessons)
  */
 export async function getComposition(id: string): Promise<SavedComposition | null> {
 	if (isSupabaseConfigured()) {
@@ -472,37 +475,82 @@ export async function getComposition(id: string): Promise<SavedComposition | nul
 			if (!supabase) return getLocal(id)
 			
 			const { data: { session } } = await supabase.auth.getSession()
-			if (!session?.user?.id) return getLocal(id)
 			
-			const { data, error } = await supabase
-				.from('compositions')
-				.select('*')
-				.eq('id', id)
-				.eq('user_id', session.user.id)
-				.single()
-			
-			if (error || !data) {
-				console.warn('[compositionService] Supabase error, falling back to localStorage:', error)
-				return getLocal(id)
+			// If logged in, try to get user's own composition first
+			if (session?.user?.id) {
+				const { data, error } = await supabase
+					.from('compositions')
+					.select('*')
+					.eq('id', id)
+					.eq('user_id', session.user.id)
+					.single()
+				
+				if (!error && data) {
+					// Transform to SavedComposition
+					return {
+						id: data.id,
+						name: data.name,
+						chords: data.chords as SavedComposition['chords'],
+						tempo: data.tempo,
+						timeSignature: data.time_signature as '3/4' | '4/4',
+						fluteType: 'innato', // Default
+						tuning: '440', // Default
+						createdAt: new Date(data.created_at).getTime(),
+						updatedAt: new Date(data.updated_at).getTime(),
+						// Include metadata fields if they exist (cast to any to allow additional fields)
+						...(data as any).subtitle && { subtitle: (data as any).subtitle },
+						...(data as any).description && { description: (data as any).description },
+						...(data as any).topic && { topic: (data as any).topic },
+						...(data as any).difficulty && { difficulty: (data as any).difficulty }
+					} as SavedComposition & { subtitle?: string; description?: string; topic?: string; difficulty?: string }
+				}
 			}
 			
-			// Transform to SavedComposition
-			return {
-				id: data.id,
-				name: data.name,
-				chords: data.chords as SavedComposition['chords'],
-				tempo: data.tempo,
-				timeSignature: data.time_signature as '3/4' | '4/4',
-				fluteType: 'innato', // Default
-				tuning: '440', // Default
-				createdAt: new Date(data.created_at).getTime(),
-				updatedAt: new Date(data.updated_at).getTime(),
-				// Include metadata fields if they exist (cast to any to allow additional fields)
-				...(data as any).subtitle && { subtitle: (data as any).subtitle },
-				...(data as any).description && { description: (data as any).description },
-				...(data as any).topic && { topic: (data as any).topic },
-				...(data as any).difficulty && { difficulty: (data as any).difficulty }
-			} as SavedComposition & { subtitle?: string; description?: string; topic?: string; difficulty?: string }
+			// If not logged in, or user's composition not found, try without user filter
+			// This allows reading compositions referenced by public lessons
+			// First check if this composition is referenced by a lesson (for security)
+			const { data: lessonCheck } = await supabase
+				.from('lessons')
+				.select('composition_id')
+				.eq('composition_id', id)
+				.limit(1)
+			
+			// If referenced by a lesson, allow reading (lessons are public)
+			// This works for both logged-in and logged-out users
+			if (lessonCheck && lessonCheck.length > 0) {
+				const { data, error } = await supabase
+					.from('compositions')
+					.select('*')
+					.eq('id', id)
+					.single()
+				
+				if (error) {
+					console.warn('[compositionService] Error reading composition referenced by lesson:', error)
+					console.warn('[compositionService] This might be due to RLS policies. Please run migration 002_allow_lesson_compositions.sql')
+					// Still fall through to localStorage
+				} else if (data) {
+					// Transform to SavedComposition
+					return {
+						id: data.id,
+						name: data.name,
+						chords: data.chords as SavedComposition['chords'],
+						tempo: data.tempo,
+						timeSignature: data.time_signature as '3/4' | '4/4',
+						fluteType: 'innato', // Default
+						tuning: '440', // Default
+						createdAt: new Date(data.created_at).getTime(),
+						updatedAt: new Date(data.updated_at).getTime(),
+						// Include metadata fields if they exist
+						...(data as any).subtitle && { subtitle: (data as any).subtitle },
+						...(data as any).description && { description: (data as any).description },
+						...(data as any).topic && { topic: (data as any).topic },
+						...(data as any).difficulty && { difficulty: (data as any).difficulty }
+					} as SavedComposition & { subtitle?: string; description?: string; topic?: string; difficulty?: string }
+				}
+			}
+			
+			// Fall back to localStorage
+			return getLocal(id)
 		} catch (error) {
 			console.error('[compositionService] Error getting from Supabase:', error)
 			return getLocal(id)

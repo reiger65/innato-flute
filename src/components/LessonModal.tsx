@@ -7,6 +7,7 @@ import { saveLessonProgress } from '../lib/lessonProgressService'
 import { simplePlayer } from '../lib/simpleAudioPlayer'
 import { getComposition } from '../lib/compositionService'
 import type { SavedComposition } from '../lib/compositionStorage'
+import { getCurrentUser } from '../lib/authService'
 
 interface LessonModalProps {
 	lesson: Lesson
@@ -14,9 +15,10 @@ interface LessonModalProps {
 	tuning: TuningFrequency
 	onClose: () => void
 	onComplete: (completedLessonId: string) => void
+	onShowLogin?: () => void
 }
 
-export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: LessonModalProps) {
+export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete, onShowLogin }: LessonModalProps) {
 	const [composition, setComposition] = useState<SavedComposition | null>(null)
 	const [selectedChordIndex, setSelectedChordIndex] = useState(0)
 	const [isPlaying, setIsPlaying] = useState(false)
@@ -33,6 +35,10 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 	const pausedDotIndexRef = useRef<number | null>(null)
 	const sequenceContainerRef = useRef<HTMLDivElement | null>(null)
 
+	// Check if user is logged in
+	const currentUser = getCurrentUser()
+	const isLoggedIn = currentUser !== null
+
 	// Load composition when modal opens
 	useEffect(() => {
 		const loadComp = async () => {
@@ -46,6 +52,21 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 		}
 		loadComp()
 	}, [lesson.compositionId])
+
+	// If not logged in and composition can't be loaded, open login screen and close modal
+	useEffect(() => {
+		// Check if composition failed to load (either no compositionId or composition is null after loading attempt)
+		const compositionFailed = !lesson.compositionId || (lesson.compositionId && !composition)
+		
+		if (!isLoggedIn && compositionFailed && onShowLogin) {
+			// Small delay to avoid flickering
+			const timer = setTimeout(() => {
+				onShowLogin()
+				onClose()
+			}, 100)
+			return () => clearTimeout(timer)
+		}
+	}, [isLoggedIn, lesson.compositionId, composition, onShowLogin, onClose])
 
 	// Handle close - stop audio and reset states
 	const handleClose = () => {
@@ -87,7 +108,9 @@ export function LessonModal({ lesson, fluteType, tuning, onClose, onComplete }: 
 						</button>
 					</div>
 					<p className="lesson-modal-description">
-						No composition assigned to this lesson yet. Please create a composition in the composer first.
+						{isLoggedIn 
+							? "No composition assigned to this lesson yet. Please create a composition in the composer first."
+							: "Opening login screen..."}
 					</p>
 				</div>
 			</div>
