@@ -1,0 +1,545 @@
+import { useState, useEffect } from 'react'
+import type { FluteType, TuningFrequency } from '../lib/fluteData'
+import type { SharedProgression, SharedComposition } from '../lib/sharedItemsStorage'
+import { CommunityPlayerModal } from './CommunityPlayerModal'
+import {
+	getRankedSharedItems,
+	isSharedItemFavorited,
+	addSharedFavorite,
+	removeSharedFavorite,
+	deleteSharedItem
+} from '../lib/sharedItemsStorage'
+import { saveProgression } from '../lib/progressionService'
+import { saveComposition } from '../lib/compositionService'
+import { getCurrentUser, isAdmin } from '../lib/authService'
+
+interface CommunityViewProps {
+	fluteType: FluteType
+	tuning: TuningFrequency
+	onOpenComposition?: (composition: SharedComposition) => void
+	onOpenProgression?: (progression: SharedProgression) => void
+	isAuthenticated?: boolean
+	onShowLogin?: () => void
+}
+
+type ViewMode = 'all' | 'progressions' | 'compositions'
+type SortMode = 'most-favorited' | 'newest' | 'oldest'
+type DateFilter = 'all' | 'today' | 'week' | 'month' | 'year'
+
+export function CommunityView({ fluteType, tuning, onOpenComposition, onOpenProgression, isAuthenticated = false, onShowLogin }: CommunityViewProps) {
+	const [sharedItems, setSharedItems] = useState<{ progressions: SharedProgression[], compositions: SharedComposition[] }>({ progressions: [], compositions: [] })
+	const [viewMode, setViewMode] = useState<ViewMode>('all')
+	const [sortMode, setSortMode] = useState<SortMode>('most-favorited')
+	const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+	const [isOffline, setIsOffline] = useState(false)
+	const [selectedItem, setSelectedItem] = useState<SharedProgression | SharedComposition | null>(null)
+	const [loadingError, setLoadingError] = useState<string | null>(null)
+	const [isLoading, setIsLoading] = useState(true)
+
+	// Load shared items when component mounts (only once when tab is opened)
+	useEffect(() => {
+		const loadItems = async () => {
+			try {
+				setIsLoading(true)
+				setLoadingError(null)
+				
+				const ranked = await getRankedSharedItems()
+				setSharedItems(ranked)
+				
+				// Don't show technical REST API errors - just show friendly empty state message
+				// The REST API error about "returned 0 compositions" is not an actual error,
+				// it's just informational logging when there are no shared items yet
+				setLoadingError(null) // Clear any technical errors when there are no items
+			} catch (error) {
+				console.error('Error loading shared items:', error)
+				setLoadingError(`Error loading shared items: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			} finally {
+				setIsLoading(false)
+			}
+		}
+
+		loadItems()
+	}, [])
+
+	// Check online/offline status
+	useEffect(() => {
+		const updateOnlineStatus = () => setIsOffline(!navigator.onLine)
+		updateOnlineStatus()
+		window.addEventListener('online', updateOnlineStatus)
+		window.addEventListener('offline', updateOnlineStatus)
+		return () => {
+			window.removeEventListener('online', updateOnlineStatus)
+			window.removeEventListener('offline', updateOnlineStatus)
+		}
+	}, [])
+
+	// Filter items by date
+	const filterByDate = (items: (SharedProgression | SharedComposition)[]): (SharedProgression | SharedComposition)[] => {
+		if (dateFilter === 'all') {
+			return items
+		}
+
+		const now = Date.now()
+		let cutoffTime = 0
+
+		switch (dateFilter) {
+			case 'today':
+				cutoffTime = now - (24 * 60 * 60 * 1000) // 24 hours
+				break
+			case 'week':
+				cutoffTime = now - (7 * 24 * 60 * 60 * 1000) // 7 days
+				break
+			case 'month':
+				cutoffTime = now - (30 * 24 * 60 * 60 * 1000) // 30 days
+				break
+			case 'year':
+				cutoffTime = now - (365 * 24 * 60 * 60 * 1000) // 365 days
+				break
+		}
+
+		const filtered = items.filter(item => {
+			const itemTime = item.sharedAt || item.createdAt || 0
+			const passes = itemTime >= cutoffTime
+			if (!passes) {
+				console.log('[CommunityView] Item filtered out by date:', {
+					name: item.name,
+					sharedAt: new Date(item.sharedAt).toISOString(),
+					cutoffTime: new Date(cutoffTime).toISOString(),
+					dateFilter
+				})
+			}
+			return passes
+		})
+		
+		return filtered
+	}
+
+	// Sort items based on selected mode
+	const getSortedItems = () => {
+		let items: (SharedProgression | SharedComposition)[] = []
+
+		if (viewMode === 'all') {
+			items = [...sharedItems.progressions, ...sharedItems.compositions]
+		} else if (viewMode === 'progressions') {
+			items = [...sharedItems.progressions]
+		} else {
+			items = [...sharedItems.compositions]
+		}
+
+		// Filter by date
+		items = filterByDate(items)
+
+		if (sortMode === 'most-favorited') {
+			// Already sorted by getRankedSharedItems
+			return items
+		} else if (sortMode === 'newest') {
+			return [...items].sort((a, b) => b.sharedAt - a.sharedAt)
+		} else {
+			return [...items].sort((a, b) => a.sharedAt - b.sharedAt)
+		}
+	}
+
+
+	const handleSaveProgression = async (progression: SharedProgression) => {
+		const saved = await saveProgression({
+			name: progression.name,
+			chordIds: progression.chordIds
+		})
+		alert(`Progression "${saved.name}" saved to your library!`)
+	}
+
+	const handleSaveComposition = async (composition: SharedComposition) => {
+		const saved = await saveComposition({
+			name: composition.name,
+			chords: composition.chords,
+			tempo: composition.tempo,
+			timeSignature: composition.timeSignature,
+			fluteType: composition.fluteType as FluteType,
+			tuning: composition.tuning as TuningFrequency
+		})
+		alert(`Composition "${saved.name}" saved to your library!`)
+	}
+
+
+	const handleToggleFavorite = (itemId: string, itemType: 'progression' | 'composition') => {
+		if (!isAuthenticated) {
+			// Prompt to login
+			if (onShowLogin) {
+				onShowLogin()
+			}
+			return
+		}
+		
+		const isFavorited = isSharedItemFavorited(itemId, itemType)
+		if (isFavorited) {
+			removeSharedFavorite(itemId, itemType)
+		} else {
+			addSharedFavorite(itemId, itemType)
+		}
+		
+		// Reload items to update favorite counts
+		getRankedSharedItems().then(ranked => setSharedItems(ranked))
+	}
+
+	const handleDeleteItem = async (itemId: string, itemType: 'progression' | 'composition', itemName: string) => {
+		const currentUser = getCurrentUser()
+		const userIsAdmin = isAdmin(currentUser)
+		
+		if (!userIsAdmin) {
+			alert('Only admins can delete shared items.')
+			return
+		}
+		
+		if (!window.confirm(`Delete "${itemName}"? This will remove it from the community for all users.`)) {
+			return
+		}
+		
+		try {
+			const success = await deleteSharedItem(itemId, itemType, userIsAdmin)
+			if (success) {
+				// Reload items to remove deleted item
+				const ranked = await getRankedSharedItems()
+				setSharedItems(ranked)
+				alert(`"${itemName}" has been deleted.`)
+			} else {
+				alert(`Failed to delete "${itemName}". Check console for details.`)
+			}
+		} catch (error) {
+			console.error('Error deleting item:', error)
+			alert(`Error deleting "${itemName}": ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+	}
+
+	const sortedItems = getSortedItems()
+	
+	// Debug: Log what's happening with filtering
+	console.log('[CommunityView] Filtering state:', {
+		viewMode,
+		dateFilter,
+		sortMode,
+		totalItems: sharedItems.progressions.length + sharedItems.compositions.length,
+		sortedItemsCount: sortedItems.length,
+		progressions: sharedItems.progressions.length,
+		compositions: sharedItems.compositions.length
+	})
+
+	return (
+		<div className="community-view">
+			{/* Header */}
+			<div className="section-title">Community</div>
+			<div className="section-desc">
+				Discover and share your favorite progressions and compositions with other INNATO players. Explore what the community has created and let others enjoy your musical explorations.
+				{isOffline && (
+					<span style={{ display: 'block', marginTop: 'var(--space-2)', color: 'rgba(0, 0, 0, 0.6)', fontSize: 'var(--font-size-sm)' }}>
+						Offline mode: Only showing local shared items
+					</span>
+				)}
+				{!isAuthenticated && (
+					<span style={{ display: 'block', marginTop: 'var(--space-2)', color: 'rgba(0, 0, 0, 0.6)', fontSize: 'var(--font-size-sm)' }}>
+						Viewing public items. <button onClick={() => onShowLogin?.()} style={{ textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}>Login</button> to share and favorite.
+					</span>
+				)}
+				{isAuthenticated && (
+					<span style={{ display: 'block', marginTop: 'var(--space-2)', color: 'rgba(0, 0, 0, 0.6)', fontSize: 'var(--font-size-sm)' }}>
+						Logged in: {sharedItems.progressions.length + sharedItems.compositions.length} shared items found
+					</span>
+				)}
+			</div>
+
+			{/* Filters */}
+			<div className="controls" style={{ marginBottom: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+				<div className="pills" style={{ flexWrap: 'wrap' }}>
+					<button
+						className={`pill ${viewMode === 'all' ? 'is-active' : ''}`}
+						onClick={() => setViewMode('all')}
+						style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+					>
+						All
+					</button>
+					<button
+						className={`pill ${viewMode === 'progressions' ? 'is-active' : ''}`}
+						onClick={() => setViewMode('progressions')}
+						style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+							<line x1="3" y1="8" x2="21" y2="8"></line>
+							<line x1="3" y1="12" x2="21" y2="12"></line>
+							<line x1="3" y1="16" x2="21" y2="16"></line>
+						</svg>
+						Progressions
+					</button>
+					<button
+						className={`pill ${viewMode === 'compositions' ? 'is-active' : ''}`}
+						onClick={() => setViewMode('compositions')}
+						style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+							<path d="M9 18V5l12-2v13"></path>
+							<circle cx="6" cy="18" r="3"></circle>
+							<circle cx="18" cy="16" r="3"></circle>
+							<line x1="12" y1="5" x2="12" y2="19"></line>
+						</svg>
+						Compositions
+					</button>
+				</div>
+
+				<div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+					<select
+						className="btn-sm"
+						value={sortMode}
+						onChange={(e) => setSortMode(e.target.value as SortMode)}
+						style={{ minWidth: '140px' }}
+					>
+						<option value="most-favorited">Most Favorited</option>
+						<option value="newest">Newest First</option>
+						<option value="oldest">Oldest First</option>
+					</select>
+
+					<select
+						className="btn-sm"
+						value={dateFilter}
+						onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+						style={{ minWidth: '120px' }}
+					>
+						<option value="all">All Time</option>
+						<option value="today">Today</option>
+						<option value="week">This Week</option>
+						<option value="month">This Month</option>
+						<option value="year">This Year</option>
+					</select>
+				</div>
+			</div>
+
+			{/* Loading/Error Status */}
+			{isLoading && (
+				<div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'rgba(0, 0, 0, 0.6)' }}>
+					<p>Loading shared items...</p>
+				</div>
+			)}
+			
+			{/* Loading Error - Only show for admins */}
+			{loadingError && !isLoading && (() => {
+				const currentUser = getCurrentUser()
+				if (!currentUser || !isAdmin(currentUser)) {
+					return null // Hide error message for non-admins
+				}
+				return (
+					<div style={{ 
+						textAlign: 'center', 
+						padding: 'var(--space-4)', 
+						color: 'rgba(0, 0, 0, 0.8)',
+						background: 'rgba(255, 200, 0, 0.1)',
+						border: '2px solid rgba(255, 200, 0, 0.5)',
+						borderRadius: 'var(--radius-2)',
+						marginBottom: 'var(--space-4)'
+					}}>
+						<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
+							⚠️ {loadingError}
+						</p>
+						<button 
+							className="btn-sm"
+							onClick={async () => {
+								setIsLoading(true)
+								setLoadingError(null)
+								try {
+									const ranked = await getRankedSharedItems()
+									setSharedItems(ranked)
+									// Don't set error for empty results - just show empty state
+									setLoadingError(null)
+								} catch (err) {
+									console.error('[CommunityView] Retry error:', err)
+									setLoadingError(`Error: ${err instanceof Error ? err.message : 'Failed to load'}`)
+								} finally {
+									setIsLoading(false)
+								}
+							}}
+						>
+							Retry Now
+						</button>
+					</div>
+				)
+			})()}
+
+			{/* Items Grid */}
+			{!isLoading && sortedItems.length === 0 && !loadingError && (
+				<div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'rgba(0, 0, 0, 0.6)' }}>
+					{sharedItems.progressions.length + sharedItems.compositions.length > 0 ? (
+						<>
+							<p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
+								Found {sharedItems.progressions.length + sharedItems.compositions.length} item(s), but they don't match your filters.
+							</p>
+							<p style={{ fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)' }}>
+								Current filters: View = "{viewMode}", Date = "{dateFilter}"
+							</p>
+							<button 
+								className="btn-sm"
+								onClick={() => {
+									setViewMode('all')
+									setDateFilter('all')
+								}}
+							>
+								Reset Filters
+							</button>
+						</>
+					) : (
+						<>
+							<p>No shared items yet. Be the first to share something!</p>
+							<p style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-2)' }}>
+								Mark progressions as favorite or share compositions to see them here.
+							</p>
+						</>
+					)}
+				</div>
+			)}
+			
+			{!isLoading && sortedItems.length > 0 && (
+				<div className="community-grid">
+					{sortedItems.map((item) => {
+						const isProgression = 'chordIds' in item
+						const isFavorited = isSharedItemFavorited(item.id, isProgression ? 'progression' : 'composition')
+						const currentUser = getCurrentUser()
+						const userIsAdmin = isAdmin(currentUser)
+
+						return (
+								<div 
+									key={item.id} 
+									className="community-card"
+									onClick={() => setSelectedItem(item)}
+									style={{ cursor: 'pointer' }}
+								>
+								{/* Card Header */}
+								<div className="community-card-header">
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<h3 className="community-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+											{/* Icon to indicate progression vs composition */}
+											<span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+												{isProgression ? (
+													// Progression icon: three equal horizontal lines (simple sequence)
+													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ opacity: 0.6 }}>
+														<line x1="3" y1="8" x2="21" y2="8"></line>
+														<line x1="3" y1="12" x2="21" y2="12"></line>
+														<line x1="3" y1="16" x2="21" y2="16"></line>
+													</svg>
+												) : (
+													// Composition icon: musical note with measure bar (suggests rhythm/timing)
+													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ opacity: 0.6 }}>
+														<path d="M9 18V5l12-2v13"></path>
+														<circle cx="6" cy="18" r="3"></circle>
+														<circle cx="18" cy="16" r="3"></circle>
+														<line x1="12" y1="5" x2="12" y2="19"></line>
+													</svg>
+												)}
+											</span>
+											<span>{item.name}</span>
+										</h3>
+										<p className="community-card-author">
+											{item.sharedByUsername}
+											{item.version > 1 && (
+												<span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.7 }}>
+													{' '}• v{item.version}
+												</span>
+											)}
+										</p>
+									</div>
+									<div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+										{currentUser && userIsAdmin && (
+											<button
+												className="community-favorite-btn"
+												onClick={(e) => {
+													e.stopPropagation()
+													handleDeleteItem(item.id, isProgression ? 'progression' : 'composition', item.name)
+												}}
+												aria-label={`Delete ${item.name}`}
+												title={`Delete ${item.name} (Admin)`}
+												style={{ color: '#dc2626' }}
+											>
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ flexShrink: 0 }}>
+													<polyline points="3 6 5 6 21 6"></polyline>
+													<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+													<line x1="10" y1="11" x2="10" y2="17"></line>
+													<line x1="14" y1="11" x2="14" y2="17"></line>
+												</svg>
+											</button>
+										)}
+										<button
+											className={`community-favorite-btn ${isFavorited ? 'is-favorited' : ''} ${!isAuthenticated ? 'disabled' : ''}`}
+											onClick={(e) => {
+												e.stopPropagation()
+												handleToggleFavorite(item.id, isProgression ? 'progression' : 'composition')
+											}}
+											disabled={!isAuthenticated}
+											aria-label={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
+											title={!isAuthenticated ? 'Login to favorite' : (isFavorited ? 'Remove from favorites' : 'Add to favorites')}
+										>
+											<svg viewBox="0 0 24 24" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" style={{ flexShrink: 0 }}>
+												<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+											</svg>
+											{item.favoriteCount > 0 && (
+												<span className="community-favorite-count">{item.favoriteCount}</span>
+											)}
+										</button>
+									</div>
+								</div>
+
+								{/* Info (no preview cards) */}
+								<div className="community-card-info">
+									{isProgression ? (
+										<div style={{ fontSize: 'var(--font-size-xs)', color: 'rgba(0, 0, 0, 0.6)' }}>
+											{item.chordIds.length} chord{item.chordIds.length !== 1 ? 's' : ''}
+										</div>
+									) : (
+										<div style={{ display: 'flex', gap: 'var(--space-2)', fontSize: 'var(--font-size-xs)', color: 'rgba(0, 0, 0, 0.6)' }}>
+											<span>{item.chords.length} chord{item.chords.length !== 1 ? 's' : ''}</span>
+											<span>•</span>
+											<span>{item.tempo} BPM</span>
+											<span>•</span>
+											<span>{item.timeSignature}</span>
+										</div>
+									)}
+									<div style={{ fontSize: '10px', color: 'rgba(0, 0, 0, 0.5)', marginTop: '2px' }}>
+										{new Date(item.sharedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+									</div>
+								</div>
+
+								{/* No actions on card - click opens modal */}
+							</div>
+						)
+					})}
+				</div>
+			)}
+
+			{/* Player Modal */}
+			{selectedItem && (
+				<CommunityPlayerModal
+					item={selectedItem}
+					fluteType={fluteType}
+					tuning={tuning}
+					onClose={() => setSelectedItem(null)}
+					onSave={() => {
+						const isProg = 'chordIds' in selectedItem
+						if (isProg) {
+							handleSaveProgression(selectedItem as SharedProgression)
+						} else {
+							handleSaveComposition(selectedItem as SharedComposition)
+						}
+						setSelectedItem(null)
+					}}
+					onOpen={() => {
+						const isProg = 'chordIds' in selectedItem
+						if (isProg) {
+							if (onOpenProgression) {
+								onOpenProgression(selectedItem as SharedProgression)
+							}
+						} else {
+							if (onOpenComposition) {
+								onOpenComposition(selectedItem as SharedComposition)
+							}
+						}
+						setSelectedItem(null)
+					}}
+				/>
+			)}
+		</div>
+	)
+}
+
