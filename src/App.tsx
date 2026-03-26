@@ -10,7 +10,6 @@ import { CommunityView } from './components/CommunityView'
 import { ManageLessonsModal } from './components/ManageLessonsModal'
 import { ManageUsersModal } from './components/ManageUsersModal'
 import { ToastContainer, useToast } from './components/Toast'
-import { AudioUnlockPrompt } from './components/AudioUnlockPrompt'
 import { fingeringToOpenStates, getFingeringForChord, getChordIdFromFingering } from './lib/chordMappings'
 import { simplePlayer, type TuningFrequency } from './lib/simpleAudioPlayer'
 import { type FluteType, getNoteForFingering, openStatesToFingering, getNotesFromOpenStates } from './lib/fluteData'
@@ -2881,8 +2880,6 @@ export default function App() {
 
 			{/* Toast Container */}
 			<ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
-
-			<AudioUnlockPrompt />
 		</div>
 	)
 }
