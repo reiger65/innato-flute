@@ -16,7 +16,7 @@ const unlockAudioOnUserGesture = () => {
 // Listen for user interactions on iOS
 // Use multiple events to catch any type of interaction
 // Don't use 'once: true' - iOS audio can get suspended again, so we need to be able to re-unlock
-const events = ['touchstart', 'touchend', 'click', 'mousedown']
+const events = ['touchstart', 'touchend', 'click', 'mousedown', 'pointerdown']
 const attachAudioUnlockListeners = () => {
 events.forEach(eventType => {
 	document.addEventListener(eventType, unlockAudioOnUserGesture, { 
