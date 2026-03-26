@@ -112,6 +112,48 @@ class SimpleAudioPlayer {
 	}
 
 	/**
+	 * Call synchronously from touch/click handlers — do not await before this.
+	 * iOS Safari only unlocks Web Audio if resume() runs in the same "gesture" turn;
+	 * async work in playChord/initAudio can run too late. This primes the real AudioContext.
+	 */
+	unlockFromUserGesture(): void {
+		try {
+			const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+			if (!AudioContextClass) return;
+
+			if (!this.audioContext) {
+				this.audioContext = new AudioContextClass({
+					latencyHint: 'interactive',
+					sampleRate: undefined,
+				});
+				this.isInitialized = true;
+			}
+
+			if (!this.gainNode && this.audioContext) {
+				this.gainNode = this.audioContext.createGain();
+				this.gainNode.connect(this.audioContext.destination);
+				this.gainNode.gain.value = 0.3;
+			}
+
+			const ctx = this.audioContext;
+			if (ctx.state === 'suspended') {
+				void ctx.resume();
+			}
+
+			// One silent sample through the same graph as real playback (helps Safari/iOS)
+			if (this.gainNode) {
+				const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+				const source = ctx.createBufferSource();
+				source.buffer = buffer;
+				source.connect(this.gainNode);
+				source.start(0);
+			}
+		} catch (e) {
+			console.warn('unlockFromUserGesture:', e);
+		}
+	}
+
+	/**
 	 * Stop any currently playing sounds
 	 */
 	stopAll(): void {
